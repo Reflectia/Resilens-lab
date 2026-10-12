@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn resilens.api.app:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./weights:/app/weights
+      - ./runs:/app/runs
+    # Resource profiles are emulated with limits, e.g.:
+    # cpus: "2"
+    # mem_limit: 4g
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run src/resilens/ui/app.py --server.address 0.0.0.0 --server.port 8501
+    environment:
+      RESILENS_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api

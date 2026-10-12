@@ -1,0 +1,11 @@
+name: B
+description: TANet cleared
+use_analyzer: false
+use_policy: false
+enhancer: tanet
+enhancer_params:
+  weights_path: weights/tanet.pth
+detector: yolox_nano
+detector_params:
+  weights_path: weights/yolox_nano_coco.pth
+tracker: bytetrack

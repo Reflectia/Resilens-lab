@@ -1,0 +1,6 @@
+name: performance
+device: cuda
+cpu_threads: null
+max_resolution: null
+frame_budget_ms: null
+memory_limit_mb: null

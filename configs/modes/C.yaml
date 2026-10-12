@@ -1,0 +1,11 @@
+name: C
+description: MWFormer cleared
+use_analyzer: false
+use_policy: false
+enhancer: mwformer_cache
+enhancer_params:
+  cache_dir: data/mwformer_cache
+detector: yolox_nano
+detector_params:
+  weights_path: weights/yolox_nano_coco.pth
+tracker: bytetrack
