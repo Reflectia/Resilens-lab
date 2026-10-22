@@ -1,0 +1,9 @@
+name: A
+description: No enhancement - basic comparison level
+use_analyzer: false
+use_policy: false
+enhancer: bypass
+detector: yolox_nano
+detector_params:
+  weights_path: weights/yolox_nano_coco.pth
+tracker: bytetrack

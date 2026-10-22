@@ -1,0 +1,12 @@
+default_action: bypass
+unknown_action: bypass
+budget_downgrade:
+  - enhance
+  - downscale
+  - skip
+  - bypass
+rules: []
+#  - degradation: fog
+#    level: 2
+#    profile: standard
+#    action: enhance

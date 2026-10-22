@@ -1,0 +1,23 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [INT_RESILENSE_2.0, main]
+
+permissions: {}
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    # Release PR (INT -> main) is exempt from the title format
+    if: github.head_ref != 'INT_RESILENSE_2.0'
+    steps:
+      - name: Check PR title format (T-<id>: summary)
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! echo "$TITLE" | grep -Eq '^T-[0-9]+: .{3,}'; then
+            echo "::error::PR title must look like 'T-21: add config validation'. Got: $TITLE"
+            exit 1
+          fi
