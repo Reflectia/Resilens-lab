@@ -1,0 +1,4 @@
+_out/
+control_videos/
+ground_truth/
+manifest.json
