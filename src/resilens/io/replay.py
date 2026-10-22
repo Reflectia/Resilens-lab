@@ -26,6 +26,7 @@ class VideoReplay:
         self.mode = mode
         self._frames_read = 0
         self._frames_dropped = 0
+        self._ended_early = False
 
     def __iter__(self) -> Iterator[FrameContext]:
         if self.mode is not ReplayMode.OFFLINE:
@@ -36,12 +37,14 @@ class VideoReplay:
             raise VideoValidationError(f"Cannot open video: {self.video.path}")
 
         self._frames_read = 0
+        self._ended_early = False
         try:
             while True:
                 started = time.perf_counter()
                 ok, frame = cap.read()
                 read_ms = (time.perf_counter() - started) * 1000
                 if not ok or frame is None:
+                    self._ended_early = self._frames_read < self.video.frame_count
                     break
                 yield FrameContext(
                     index=self._frames_read,
@@ -53,7 +56,7 @@ class VideoReplay:
         finally:
             cap.release()
 
-        if self.ended_early:
+        if self._ended_early:
             logger.warning(
                 "Video %s ended early: read %d of %d frames (file may be truncated or corrupted)",
                 self.video.path,
@@ -68,8 +71,8 @@ class VideoReplay:
 
     @property
     def ended_early(self) -> bool:
-        """True if the last iteration stopped before the frame count reported by the file."""
-        return self._frames_read < self.video.frame_count
+        """True if the file ran out of frames before the frame count it reports."""
+        return self._ended_early
 
     @property
     def frames_dropped(self) -> int:

@@ -68,6 +68,22 @@ def test_stops_gracefully_when_file_has_fewer_frames_than_reported(video_info, c
     assert "ended early" in caplog.text
 
 
+def test_not_ended_early_before_iterating(video_info) -> None:
+    assert not VideoReplay(video_info).ended_early
+
+
+def test_not_ended_early_when_consumer_stops(video_info, caplog) -> None:
+    replay = VideoReplay(video_info)
+
+    for frame in replay:
+        if frame.index == 4:
+            break
+
+    assert replay.frames_read == 4
+    assert not replay.ended_early
+    assert "ended early" not in caplog.text
+
+
 def test_file_removed_after_validation(video_info) -> None:
     video_info.path.unlink()
 
