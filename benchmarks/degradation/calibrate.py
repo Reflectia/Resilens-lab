@@ -57,7 +57,7 @@ def predict(scores, config: AnalyzerConfig, indices: np.ndarray) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--confidence", type=float, default=0.5, help="confidence threshold to report and write")
+    parser.add_argument("--confidence", type=float, default=0.25, help="confidence threshold to report and write")
     parser.add_argument("--write", action="store_true", help=f"write thresholds to {ANALYZER_CONFIG}")
     args = parser.parse_args()
 
