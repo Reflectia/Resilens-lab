@@ -87,20 +87,25 @@ are leave-one-sequence-out (thresholds fitted on 3 sequences, tested on the 4th)
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | fog | `dark_channel_p5` (Analyzer) | 1.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.9 |
 | fog | `low_saturation` | 1.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.2 |
-| low light | `dark_mean` (Analyzer) | 0.829 | 0.934 | 1.000 | 0.000 | 0.649 | 0.1 |
-| motion blur | `high_freq_ratio` (Analyzer) | 0.979 | 0.993 | 1.000 | 0.000 | 0.917 | 4.2 |
-| motion blur | `laplacian_var_norm` | 0.568 | 0.701 | 0.891 | 0.438 | 0.417 | 2.1 |
-| rain | `temporal_streaks` (Analyzer) | 0.958 | 0.986 | 1.000 | 0.000 | 0.875 | 1.3 |
-| rain | `vertical_line_response` | 0.978 | 0.969 | 0.984 | 0.250 | 0.952 | 1.3 |
+| low light | `dark_mean` (Analyzer) | 0.799 | 0.865 | 1.000 | 0.156 | 0.530 | 0.1 |
+| motion blur | `high_freq_ratio` (Analyzer) | 1.000 | 1.000 | 1.000 | 0.000 | 1.000 | 3.5 |
+| motion blur | `laplacian_var_norm` | 0.560 | 0.701 | 0.891 | 0.406 | 0.417 | 1.8 |
+| rain | `temporal_streaks` (Analyzer) | 0.958 | 0.986 | 1.000 | 0.000 | 0.875 | 1.0 |
+| rain | `orientation_dominance` | 1.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.7 |
+| rain | `vertical_line_response` | 0.978 | 0.969 | 0.984 | 0.250 | 0.952 | 1.2 |
 
-Plain accuracy overstated weaker indicators: `dark_mean` drops from 0.93 to 0.83 and `laplacian_var_norm`
-(the earlier "fast" blur option) from 0.86 to 0.57 with a 44% false-alarm rate. For rain the Analyzer keeps
+Plain accuracy overstated weaker indicators: `dark_mean` drops from 0.93 to 0.80 and `laplacian_var_norm`
+(the earlier "fast" blur option) from 0.86 to 0.56 with a 41% false-alarm rate. For rain the Analyzer keeps
 `temporal_streaks` over `vertical_line_response`: slightly lower balanced accuracy, but no false alarms on clean
-frames (a false alarm makes the Policy run TANet for nothing).
+frames (a false alarm makes the Policy run TANet for nothing). With centred thresholds the single-frame
+`orientation_dominance` now scores 1.000 with no false alarms, so it is a candidate to replace `temporal_streaks`
+(it would also work on the first frame); not switched yet.
 
-Low light detects presence perfectly but confuses level 1 and 2: absolute brightness depends on the scene.
-MOT20-05's clean frames score 204 (255 - mean luma) against 142 for MOT20-01/02, so its level 1 lands where
-other scenes' level 2 is.
+Low light always detects low-light frames but confuses level 1 and 2, and on its own raises false alarms on
+16% of clean frames: absolute brightness depends on the scene. MOT20-05's clean frames score 204
+(255 - mean luma) against 142 for MOT20-01/02, so its clean frames sit close to other scenes' level 1 and its
+level 1 lands where other scenes' level 2 is. In the full Analyzer these clean false alarms are filtered out
+(0 false alarms on clean at confidence 0.25, see below).
 
 ### Analyzer decision (`calibrate.py`)
 
@@ -115,7 +120,8 @@ other scenes' level 2 is.
 
 0.25 removes all false alarms on clean frames for 3% `unknown`; higher thresholds mostly turn correct clean
 frames into `unknown` without making the remaining answers more accurate. Remaining errors at 0.25 are almost
-all low-light level confusions (32 of 64 low-light samples) and rain level 1 / level 2 (4 of 64).
+all low-light errors (34 of 64 low-light samples: 32 with levels swapped, 2 `unknown`) and rain level 1 / level 2
+(4 of 64).
 
 Thresholds are centred in the gap between the training scores around them. Without centring the search left
 level 1 thresholds at the very edge of the level 1 scores, so those frames were always borderline.
