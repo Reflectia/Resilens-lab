@@ -14,6 +14,15 @@ class DegradationType(StrEnum):
     UNKNOWN = "unknown"
 
 
+# Types the Degradation Analyzer can report besides NONE and UNKNOWN
+DETECTABLE_DEGRADATIONS = (
+    DegradationType.FOG,
+    DegradationType.RAIN,
+    DegradationType.LOW_LIGHT,
+    DegradationType.MOTION_BLUR,
+)
+
+
 class Action(StrEnum):
     ENHANCE = "enhance"
     BYPASS = "bypass"

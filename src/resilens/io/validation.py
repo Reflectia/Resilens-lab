@@ -5,6 +5,10 @@ import cv2
 from resilens.core.contracts import VideoInfo
 
 SUPPORTED_EXTENSIONS = {".mp4", ".avi"}
+# Always decode with FFmpeg (bundled with opencv-python on every platform). Without it OpenCV falls back to
+# other backends when FFmpeg fails, so results depend on the machine, and its built-in AVI reader prints
+# parser errors straight to stderr.
+VIDEO_BACKEND = cv2.CAP_FFMPEG
 
 
 class VideoValidationError(Exception):
@@ -29,7 +33,7 @@ class VideoValidator:
             supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
             raise VideoValidationError(f"Unsupported video format '{path.suffix}'. Supported: {supported}")
 
-        cap = cv2.VideoCapture(str(path))
+        cap = cv2.VideoCapture(str(path), VIDEO_BACKEND)
         try:
             if not cap.isOpened():
                 raise VideoValidationError(f"Cannot open video (file is corrupted or codec is not supported): {path}")
