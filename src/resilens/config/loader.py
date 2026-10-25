@@ -1,18 +1,48 @@
 from pathlib import Path
 
+import yaml
+
+from resilens.config.config import CONFIGS_DIR
 from resilens.config.schema import ModeConfig, ProfileConfig, RunConfig
+
+
+class ConfigNotFoundError(FileNotFoundError):
+    """A mode or profile name has no YAML preset."""
+
+
+def available_modes() -> list[str]:
+    """Names of the mode presets in configs/modes/."""
+    return sorted(path.stem for path in (CONFIGS_DIR / "modes").glob("*.yaml"))
+
+
+def available_profiles() -> list[str]:
+    """Names of the resource profiles in configs/profiles/."""
+    return sorted(path.stem for path in (CONFIGS_DIR / "profiles").glob("*.yaml"))
+
+
+def _preset_path(name_or_path: str | Path, kind: str, available: list[str]) -> Path:
+    """A path to a .yaml file is used as is; anything else must be a preset name from configs/<kind>/."""
+    if Path(name_or_path).suffix in (".yaml", ".yml"):
+        return Path(name_or_path)
+    if str(name_or_path) not in available:
+        raise ConfigNotFoundError(f"Unknown {kind[:-1]} '{name_or_path}'. Available: {', '.join(available)}")
+    return CONFIGS_DIR / kind / f"{name_or_path}.yaml"
+
+
+def _read_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def load_mode(name_or_path: str | Path) -> ModeConfig:
     """Load a mode preset from configs/modes/."""
-    pass
+    return ModeConfig(**_read_yaml(_preset_path(name_or_path, "modes", available_modes())))
 
 
 def load_profile(name_or_path: str | Path) -> ProfileConfig:
     """Load a resource profile from configs/profiles/."""
-    pass
+    return ProfileConfig(**_read_yaml(_preset_path(name_or_path, "profiles", available_profiles())))
 
 
 def build_run_config(mode: str, profile: str, source: Path, **overrides) -> RunConfig:
     """Combine mode, profile and run options into a validated RunConfig."""
-    pass
+    return RunConfig(mode=load_mode(mode), profile=load_profile(profile), source=source, **overrides)

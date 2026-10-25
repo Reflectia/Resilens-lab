@@ -4,6 +4,10 @@ from enum import StrEnum
 from pathlib import Path
 
 
+class RunNotFoundError(KeyError):
+    """No run with this run_id exists in the store."""
+
+
 class RunStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
