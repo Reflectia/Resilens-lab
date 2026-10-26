@@ -2,8 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from resilens import __version__
 from resilens.api.routes import router
@@ -28,11 +27,6 @@ def create_app(manager: RunManager | None = None, uploads_dir: Path = UPLOADS_DI
     application.state.queue = queue
     application.state.uploads_dir = uploads_dir
     application.include_router(router)
-
-    @application.exception_handler(NotImplementedError)
-    async def not_implemented(_: Request, error: NotImplementedError) -> JSONResponse:
-        return JSONResponse(status_code=501, content={"detail": str(error)})
-
     return application
 
 

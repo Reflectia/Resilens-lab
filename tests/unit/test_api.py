@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from resilens.api.app import create_app
+from resilens.core.pipeline import Pipeline
 from resilens.runs.manager import RunManager
-from resilens.runs.store import RunStore
 from resilens.testing.runs import STUB_METRICS, StubRunManager
 
 
@@ -48,9 +48,9 @@ def test_create_run_with_video(client, run_manager, video, uploads_dir) -> None:
     assert body["status"] == "queued"
     assert response.headers["location"] == f"/runs/{body['run_id']}"
 
-    config = run_manager.store.configs[body["run_id"]]
+    config = run_manager.store.load_config(body["run_id"])
     assert (config.mode.name, config.profile.name) == ("A", "minimal")
-    assert config.source.parent.parent == uploads_dir
+    assert config.source.parent.parent == uploads_dir.resolve()
     assert config.source.read_bytes() == video.read_bytes()
 
 
@@ -142,7 +142,7 @@ def test_invalid_request_is_rejected(client, run_manager, video, uploads_dir, fo
 
     assert response.status_code == 422
     assert message in response.json()["detail"]
-    assert run_manager.store.records == {}
+    assert run_manager.store.list_runs() == []
     assert not uploads_dir.exists() or not any(uploads_dir.iterdir())
 
 
@@ -178,16 +178,16 @@ def test_bad_video_is_rejected_and_not_kept(
 
     assert response.status_code == 422
     assert message in response.json()["detail"]
-    assert run_manager.store.records == {}
+    assert run_manager.store.list_runs() == []
     assert not uploads_dir.exists() or not any(uploads_dir.iterdir())
 
 
 def test_upload_name_cannot_escape_uploads_dir(client, run_manager, video, uploads_dir) -> None:
     run_id = post_run(client, video, filename="../../evil.mp4").json()["run_id"]
 
-    source = run_manager.store.configs[run_id].source
+    source = run_manager.store.load_config(run_id).source
     assert source.name == "evil.mp4"
-    assert source.parent.parent == uploads_dir
+    assert source.parent.parent == uploads_dir.resolve()
 
 
 def test_scenario_runs_are_not_implemented_yet(client) -> None:
@@ -201,11 +201,24 @@ def test_list_scenarios(client) -> None:
     assert isinstance(client.get("/scenarios").json(), list)
 
 
-def test_unimplemented_run_store_is_reported_not_crashed(video, uploads_dir, tmp_path) -> None:
-    with TestClient(create_app(RunManager(RunStore(tmp_path / "runs")), uploads_dir)) as client:
-        listed = client.get("/runs")
-        created = post_run(client, video)
+class FakePipeline:
+    def run(self, frames):
+        return list(frames)
 
-    assert (listed.status_code, created.status_code) == (501, 501)
-    assert "T-06" in listed.json()["detail"]
-    assert not any(uploads_dir.iterdir())
+
+@pytest.mark.parametrize(("pipeline", "status"), [(None, "failed"), (FakePipeline(), "completed")])
+def test_real_run_manager(video, uploads_dir, run_store, monkeypatch, pipeline, status: str) -> None:
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: pipeline)
+    with TestClient(create_app(RunManager(run_store), uploads_dir)) as client:
+        run_id = post_run(client, video).json()["run_id"]
+        wait_for_runs(client)
+        run = client.get(f"/runs/{run_id}").json()
+        report = client.get(f"/runs/{run_id}/report")
+
+    assert run["status"] == status
+    if status == "completed":
+        assert run["error"] is None
+        assert report.json()["metrics"]["processed_frames"] == 10
+    else:
+        assert "Pipeline is not implemented yet" in run["error"]
+        assert report.status_code == 409

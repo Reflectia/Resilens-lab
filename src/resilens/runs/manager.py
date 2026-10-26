@@ -1,7 +1,7 @@
 """Single entry point used by CLI and REST API to start and execute runs.
 
 The REST API (T-16) calls submit() in the request and execute() later in a background worker,
-one run at a time; it reads runs through `store`. Keep these signatures when implementing (T-06).
+one run at a time; it reads runs through `store`.
 """
 
 import time
