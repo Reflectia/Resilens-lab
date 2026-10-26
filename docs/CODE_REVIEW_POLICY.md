@@ -6,7 +6,7 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 
 1. Never commit to `main`. Work in a branch named `DEV_T<id>_<short_name>` (e.g. `DEV_T19_Basic_setup`).
 2. Keep PRs small: one task, ideally under ~400 changed lines. Split larger work.
-3. Open a PR into the integration branch `INT_RESILENSE_2.0` (not `main`; `main` is updated only from `INT_RESILENSE_2.0` by the team lead) using the PR template. Use **Draft** until it is ready for review.
+3. Open a PR into `main` using the PR template. Use **Draft** until it is ready for review.
 4. Author self-reviews the diff first and ticks the author checklist.
 5. A PR needs at least **1 approval** before merge.
 6. A PR is merged only when CI (GitHub Actions) is green: `CI` (`ruff check .`, `ruff format --check .`, `pytest tests`) and `PR title` (format `T-<id>: ...`).
@@ -19,9 +19,9 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 
 ## 3. PR titles and commits
 
-The **PR title** is what matters: with squash merge it becomes the commit message on the integration branch.
+The **PR title** is what matters: with squash merge it becomes the commit message on `main`.
 
-Format: `T-<id>: <imperative summary, max ~72 chars>`
+Format: `T-<id>: <imperative summary, max ~72 chars>`. Subtasks use the parent task id: task T-04-0 is titled `T-04: ...`.
 
 Good: `T-21: add confidence threshold validation to YOLOX config`
 Bad: `fix`, `changes`, `wip`, `final final 2`
@@ -30,7 +30,6 @@ Rules:
 - Commits inside a PR are free-form but meaningful (no `wip` spam); they are squashed anyway.
 - No secrets, model weights, videos, or generated files (`runs/`, `data/`, `weights/`).
 - Repo setting (Settings → General → Pull Requests): squash merge default message = **Pull request title**, otherwise single-commit PRs use the commit message.
-- Release PR `INT_RESILENSE_2.0` → `main` may be titled `Release ...`.
 
 ## 4. Reviewer checklist
 
@@ -76,7 +75,7 @@ Rules:
 
 ## 7. Repo settings and enforcement
 
-The free GitHub plan does not enforce branch protection on private repos, so the rules above are a team agreement that GitHub does not check for us: nobody merges a PR with a red CI or without an approval, and nobody pushes directly to `INT_RESILENSE_2.0` or `main`. Free settings that still help (Settings → General → Pull Requests):
+The free GitHub plan does not enforce branch protection on private repos, so the rules above are a team agreement that GitHub does not check for us: nobody merges a PR with a red CI or without an approval, and nobody pushes directly to `main`. Free settings that still help (Settings → General → Pull Requests):
 
 - Allow only **Squash merging**; default commit message = **Pull request title**.
 - Enable **Automatically delete head branches**.

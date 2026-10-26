@@ -1,3 +1,5 @@
+import numpy as np
+
 from resilens.core.contracts import Detection, Track
 from resilens.tracking.base import Tracker
 
@@ -16,5 +18,5 @@ class ByteTrackTracker(Tracker):
     def setup(self) -> None:
         pass
 
-    def update(self, detections: list[Detection], frame_index: int) -> list[Track]:
+    def update(self, detections: list[Detection], frame_index: int, image: np.ndarray) -> list[Track]:
         pass
