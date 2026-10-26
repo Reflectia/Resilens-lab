@@ -15,4 +15,4 @@ Task: T-
 ## Notes for reviewers
 <!-- Risky parts, trade-offs, anything to look at first -->
 
-Reviewer checklist: https://github.com/Reflectia/Resilens-lab/blob/INT_RESILENSE_2.0/docs/CODE_REVIEW_POLICY.md
+Reviewer checklist: https://github.com/Reflectia/Resilens-lab/blob/main/docs/CODE_REVIEW_POLICY.md
