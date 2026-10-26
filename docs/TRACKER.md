@@ -66,8 +66,8 @@ from pathlib import Path
 from resilens.tracking.flow_tracker import FlowTracker, load_targets
 
 tracker = FlowTracker(load_targets(Path("runs/tracking/MOT20-01_clean/targets.json")))
-tracker.setup()                # before each video
-ctx = tracker.process(ctx)     # every frame, after the enhancer; fills ctx.tracks
+tracker.setup()  # before each video
+ctx = tracker.process(ctx)  # every frame, after the enhancer; fills ctx.tracks
 ```
 
 Mode configs (`configs/modes/*.yaml`) still name `bytetrack`. Wiring `FlowTracker` into `Pipeline.from_config` is part of the pipeline task.
