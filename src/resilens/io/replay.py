@@ -6,7 +6,7 @@ import cv2
 
 from resilens.config.schema import ReplayMode
 from resilens.core.contracts import FrameContext, StageTiming, VideoInfo
-from resilens.io.validation import VideoValidationError
+from resilens.io.validation import VIDEO_BACKEND, VideoValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class VideoReplay:
         if self.mode is not ReplayMode.OFFLINE:
             raise NotImplementedError(f"Replay mode '{self.mode}' is not implemented yet")
 
-        cap = cv2.VideoCapture(str(self.video.path))
+        cap = cv2.VideoCapture(str(self.video.path), VIDEO_BACKEND)
         if not cap.isOpened():
             raise VideoValidationError(f"Cannot open video: {self.video.path}")
 

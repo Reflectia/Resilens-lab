@@ -53,6 +53,7 @@ def test_unsupported_extension(tmp_path: Path) -> None:
         ("random.mp4", os.urandom(4096)),
         ("text.avi", b"this is not a video"),
     ],
+    ids=["empty", "random_bytes", "text"],
 )
 def test_corrupted_file_raises_validation_error(tmp_path: Path, name: str, content: bytes) -> None:
     path = tmp_path / name
