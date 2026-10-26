@@ -5,8 +5,10 @@ import cv2
 import numpy as np
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from resilens.runs.store import RunStore
+from resilens.testing.runs import StubRunManager
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 FOURCC_BY_EXTENSION = {".avi": "MJPG", ".mp4": "mp4v"}
 
 
@@ -30,3 +32,13 @@ def make_video(tmp_path: Path) -> Callable[..., Path]:
         return path
 
     return _make
+
+
+@pytest.fixture
+def run_store(tmp_path: Path) -> RunStore:
+    return RunStore(tmp_path / "runs")
+
+
+@pytest.fixture
+def run_manager(run_store: RunStore) -> StubRunManager:
+    return StubRunManager(run_store)
