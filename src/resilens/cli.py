@@ -1,12 +1,17 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 import psutil
 
+from resilens.config.config import RUNS_DIR
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidationError, VideoValidator
+from resilens.reports.generator import ReportGenerator
+from resilens.runs.models import RunNotFoundError, RunStatus
+from resilens.runs.store import RunStore
 
 FRAME_TABLE_HEADER = f"{'frame':>7} {'time_s':>9} {'read_ms':>9} {'avg_ms':>9} {'fps':>8} {'ram_mb':>9}"
 
@@ -60,8 +65,20 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
     pass
 
 
-def cmd_report(args: argparse.Namespace) -> None:
-    pass
+def cmd_report(args: argparse.Namespace) -> int:
+    """Print completed run reports already saved in the run store."""
+    store = RunStore(RUNS_DIR)
+    reports = ReportGenerator(store)
+    for run_id in args.run_ids:
+        try:
+            record = store.get(run_id)
+            if record.status != RunStatus.COMPLETED:
+                raise ValueError(f"Run '{run_id}' is {record.status}; no completed report is available")
+            print(json.dumps(reports.load_report(run_id), indent=2))
+        except (RunNotFoundError, FileNotFoundError, ValueError, json.JSONDecodeError) as error:
+            print(f"Cannot show report for '{run_id}': {error}", file=sys.stderr)
+            return 1
+    return 0
 
 
 def cmd_build_scenarios(args: argparse.Namespace) -> None:

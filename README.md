@@ -24,3 +24,17 @@ ruff check .                             # linter
 ```
 
 Or run everything in Docker: `docker compose up --build`.
+
+## Tracker
+
+An optical-flow tracker follows targets you select by hand on the first frame:
+
+```powershell
+# Demo: draw boxes around targets (Enter = add, Esc = start), watch the tracking, save the annotated video
+python -m resilens.tracking.flow_tracker path/to/clean.mp4 --save-video
+
+# Benchmark runs: reuse the same targets on every clip, without windows
+python -m resilens.tracking.flow_tracker path/to/fog_l2.mp4 --targets runs/tracking/<folder>_clean/targets.json --no-display
+```
+
+Outputs go to `runs/tracking/<folder>_<video name>/`. See [docs/TRACKER.md](docs/TRACKER.md) for controls, the benchmark workflow, output formats and how to evaluate the results.
