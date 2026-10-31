@@ -14,6 +14,7 @@ pip install -e ".[dev]"
 ```
 
 Put model weights into `weights/` and videos and scenarios into `data/` (both folders are excluded from git).
+TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 
 ```powershell
 uvicorn resilens.api.app:app --reload    # REST API: http://127.0.0.1:8000/docs

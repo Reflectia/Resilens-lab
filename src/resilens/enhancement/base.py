@@ -14,5 +14,6 @@ class Enhancer(Stage):
         pass
 
     def process(self, ctx: FrameContext) -> FrameContext:
-        """Make decision (enhance / downscale / skip / bypass) and set ctx.enhanced."""
-        pass
+        """Set ctx.enhanced. Policy decisions (enhance / downscale / skip / bypass) are not applied yet."""
+        ctx.enhanced = self.enhance(ctx.image)
+        return ctx
