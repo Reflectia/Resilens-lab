@@ -2,9 +2,10 @@
 
 Tracking: every frame each box moves by the median Lucas-Kanade motion of corner points in its central part.
 Points that do not come back to where they started when tracked backwards are ignored. If flow fails, the box
-waits in place (score 0) for up to MAX_MISSES frames before it is dropped. Detections are not used.
+waits in place (score 0) for up to MAX_MISSES frames before it is dropped. Detections only choose the targets.
 
-In the pipeline, FlowTracker(targets) is a Tracker stage that follows ctx.working_image (the enhanced frame).
+In the pipeline (tracker: flow), FlowTracker() is a Tracker stage that takes its targets from the first frame with
+detections and follows ctx.working_image (the enhanced frame). FlowTracker(targets) uses hand-selected boxes.
 
 Command line:
     python -m resilens.tracking.flow_tracker VIDEO                          # select targets in a window
@@ -29,6 +30,7 @@ import cv2
 import numpy as np
 
 from resilens.core.contracts import Detection, Track
+from resilens.core.registry import registry
 from resilens.tracking.base import Tracker
 
 Box = tuple[float, float, float, float]  # x, y, width, height
@@ -96,12 +98,23 @@ def move_tracks(
     return updated
 
 
+def detection_boxes(detections: list[Detection]) -> list[Box]:
+    """Detection boxes as (x, y, width, height), best score first."""
+    ordered = sorted(detections, key=lambda d: d.score, reverse=True)
+    return [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (d.bbox for d in ordered)]
+
+
+@registry.register("flow")
 class FlowTracker(Tracker):
-    """Tracker stage: starts on the first frame it gets, with target IDs 1..N in the order of `targets`."""
+    """Tracker stage with target IDs 1..N in the order of `targets`.
+
+    With `targets` (hand-selected boxes) tracking starts on the first frame it gets. Without them the targets are
+    the detections of the first frame that has any, best score first; later detections are not used.
+    """
 
     name = "flow"
 
-    def __init__(self, targets: list[Box]) -> None:
+    def __init__(self, targets: list[Box] | None = None) -> None:
         self.targets = targets
         self.setup()
 
@@ -111,10 +124,13 @@ class FlowTracker(Tracker):
         self._previous_gray: np.ndarray | None = None
 
     def update(self, detections: list[Detection], frame_index: int, image: np.ndarray) -> list[Track]:
-        """Detections are ignored: targets are followed by optical flow only."""
+        """Follow the targets by optical flow; detections only choose the targets when none were given."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         if self._previous_gray is None:
-            self.tracks = {i + 1: box for i, box in enumerate(self.targets)}
+            targets = self.targets if self.targets is not None else detection_boxes(detections)
+            if not targets:
+                return []  # wait for a frame with detections
+            self.tracks = {i + 1: box for i, box in enumerate(targets)}
         else:
             self.tracks = move_tracks(self._previous_gray, gray, self.tracks, self.misses)
         self._previous_gray = gray

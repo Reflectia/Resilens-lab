@@ -36,6 +36,9 @@ def test_run_creates_consistent_report_for_cli_and_api_contract(tmp_path, make_v
     assert metrics["processing_time_s"] > 0
     assert metrics["fps"] == metrics["processed_frames"] / metrics["processing_time_s"]
     assert metrics["peak_ram_mb"] > 0
+    assert metrics["detections_per_frame"] == metrics["tracks_per_frame"] == 1
+    assert len((store.run_dir(run_id) / "detections.txt").read_text().splitlines()) == 5
+    assert (store.run_dir(run_id) / "tracks.txt").read_text().startswith("1,1,10.0,10.0,20.0,30.0,0.900")
     assert report["metrics"] == metrics
     assert report["run_id"] == run_id
 

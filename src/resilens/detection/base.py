@@ -15,4 +15,5 @@ class Detector(Stage):
 
     def process(self, ctx: FrameContext) -> FrameContext:
         """Run detect() on ctx.working_image and store ctx.detections."""
-        pass
+        ctx.detections = self.detect(ctx.working_image)
+        return ctx

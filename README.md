@@ -15,6 +15,7 @@ pip install -e ".[dev]"
 
 Put model weights into `weights/` and videos and scenarios into `data/` (both folders are excluded from git).
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
+YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
 ```powershell
 uvicorn resilens.api.app:app --reload    # REST API: http://127.0.0.1:8000/docs

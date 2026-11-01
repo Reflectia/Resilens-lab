@@ -1,6 +1,6 @@
 # Optical-flow tracker (T-04)
 
-`src/resilens/tracking/flow_tracker.py` follows targets chosen by hand on the first frame of a video. Every frame each box moves by the median optical flow (Lucas-Kanade) of corner points in its central part. When flow fails, the box waits in place for up to 10 frames before it is dropped. Detections are not used.
+`src/resilens/tracking/flow_tracker.py` follows targets chosen by hand on the first frame of a video. Every frame each box moves by the median optical flow (Lucas-Kanade) of corner points in its central part. When flow fails, the box waits in place for up to 10 frames before it is dropped. Detections are only used to choose the targets in the pipeline (see below).
 
 The same file provides:
 
@@ -70,7 +70,7 @@ tracker.setup()  # before each video
 ctx = tracker.process(ctx)  # every frame, after the enhancer; fills ctx.tracks
 ```
 
-Mode configs (`configs/modes/*.yaml`) still name `bytetrack`. Wiring `FlowTracker` into `Pipeline.from_config` is part of the pipeline task.
+In runs (`POST /runs`, mode configs with `tracker: flow`) the pipeline creates `FlowTracker()` without targets: they are the YOLOX-Nano detections of the first frame that has any, IDs 1..N by score. People who appear later are not tracked. Each run saves `detections.txt` and `tracks.txt` in MOT format to `runs/<run_id>/`.
 
 ### Outputs
 

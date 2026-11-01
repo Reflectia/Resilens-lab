@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from resilens.core.registry import registry
 from resilens.enhancement.base import Enhancer
 from resilens.enhancement.tanet_model import TANet
 
@@ -17,6 +18,7 @@ def load_state_dict(weights_path: Path) -> dict[str, torch.Tensor]:
     return {key.removeprefix("module."): value for key, value in state.items()}
 
 
+@registry.register("tanet")
 class TANetEnhancer(Enhancer):
     name = "tanet"
 
