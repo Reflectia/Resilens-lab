@@ -72,6 +72,8 @@ ctx = tracker.process(ctx)  # every frame, after the enhancer; fills ctx.tracks
 
 In runs (`POST /runs`, mode configs with `tracker: flow`) the pipeline creates `FlowTracker()` without targets: they are the YOLOX-Nano detections of the first frame that has any, IDs 1..N by score. People who appear later are not tracked. Each run saves `detections.txt` and `tracks.txt` in MOT format to `runs/<run_id>/`.
 
+In mode D the Policy Engine may downscale some frames. The tracker then runs optical flow on the smaller frame, while boxes, targets and the MOT output stay in original video pixels.
+
 ### Outputs
 
 | File | Content |

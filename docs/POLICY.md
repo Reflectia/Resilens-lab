@@ -20,6 +20,8 @@ Replay -> Analyzer -> Policy -> Enhancer (TANet) -> Detector -> Tracker
 
 After `downscale` the detector's boxes are mapped back to original pixels, and the flow tracker follows targets across frames of different sizes, so `detections.txt` and `tracks.txt` always use original video coordinates.
 
+In modes B and D TANet runs on a quarter-size frame and the result is scaled back (`enhancer_params.scale: 0.25`). On CPU a full 1080p frame takes ~9 s, a quarter-size one ~0.5 s.
+
 ## Configuration
 
 - **Rule table:** [`configs/policy/rules.yaml`](../configs/policy/rules.yaml), version 0.1 from T-07. It also sets `skip_every_n`, the downgrade order and the budget parameters (latency window, `mean` or `p95`, `near_limit_ratio`). The values marked provisional are to be confirmed by TL/TA.
@@ -57,3 +59,20 @@ curl.exe -F mode=D -F profile=standard -F replay_mode=realtime -F "video=@path/t
 | `reason` | readable explanation, e.g. `fog level 2 on standard: enhance; latency 342 ms > budget 150 ms -> skip` |
 
 The report adds `policy_<action>_share` for each action, `policy_downgraded_share` and `policy_enhanced_share`.
+
+## First measurements (input for rule calibration)
+
+MOT20-01, first 60 frames, CPU, real TANet and YOLOX-Nano weights, profile `standard` unless noted. Detection recall at IoU ≥ 0.5 against the ground truth:
+
+| Clip | A | B (TANet every frame) | D standard | D minimal |
+| --- | --- | --- | --- | --- |
+| clean | 0.30, 134 ms | 0.31, 626 ms | 0.30, 136 ms (bypass) | 0.30, 137 ms (bypass) |
+| fog_l1 | 0.28, 100 ms | 0.31, 677 ms | 0.29, 159 ms (skip) | 0.28, 109 ms (bypass) |
+| fog_l2 | 0.22, 98 ms | 0.30, 681 ms | 0.30, 675 ms (enhance) | 0.25, 129 ms (skip) |
+| rain_l2 | 0.00, 37 ms | 0.00, 575 ms | 0.00, 572 ms (enhance) | 0.00, 43 ms (skip) |
+
+Latency is the median per frame after warm-up.
+
+- TANet removes our synthetic fog well (fog_l2 PSNR to the clean video 8.9 → 26.9 dB) and brings detection back to the clean level, while D on clean video costs no more than A.
+- TANet does not remove our synthetic rain, and YOLOX finds nobody on rain_l2 with or without it. Whether `enhance` for rain is worth its cost, and whether the synthetic rain is too heavy, is left for the rule calibration.
+- The budget correction lowers the action by one step, as the rule table says. With a test budget of 150 ms, `enhance` became `skip`, but the moving latency stayed over the budget (TANet on every third frame). Whether to lower further is to be decided once the profiles have real limits.
