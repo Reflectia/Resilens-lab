@@ -1,12 +1,30 @@
+# Policy Engine rule table, version 0.1 (task T-07, preliminary; confirmed by TL).
+# Degradation type and level from the Analyzer + resource profile -> base action.
+# Levels: 1 = low, 2 = high. unknown, none and anything without a rule get default_action.
+# TANet only removes rain and fog; low light and motion blur stay bypass until they get their own method.
+
+skip_every_n: 3  # skip: TANet runs on every N-th frame (provisional, TL/TA)
+downgrade_order: [enhance, skip, bypass, downscale]
 default_action: bypass
-unknown_action: bypass
-budget_downgrade:
-  - enhance
-  - downscale
-  - skip
-  - bypass
-rules: []
-#  - degradation: fog
-#    level: 2
-#    profile: standard
-#    action: enhance
+
+# Budget correction: the action is lowered one step along downgrade_order when the moving latency is over the
+# profile's frame_budget_ms or RAM/CPU/GPU reach near_limit_ratio of the profile limit. Limits set to null are
+# not checked. Provisional values (TL/TA).
+budget:
+  latency_window: 30  # frames
+  latency_metric: mean  # mean | p95
+  near_limit_ratio: 0.9
+
+rules:
+  - types: [rain, fog]
+    level: 1
+    actions: {minimal: bypass, standard: skip, performance: enhance}
+  - types: [rain, fog]
+    level: 2
+    actions: {minimal: skip, standard: enhance, performance: enhance}
+  - types: [low_light, motion_blur]
+    level: 1
+    actions: {minimal: bypass, standard: bypass, performance: bypass}
+  - types: [low_light, motion_blur]
+    level: 2
+    actions: {minimal: bypass, standard: bypass, performance: bypass}

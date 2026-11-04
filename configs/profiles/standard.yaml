@@ -1,6 +1,9 @@
 name: standard
 device: cpu
 cpu_threads: null
-max_resolution: null
+max_resolution: null  # (width, height); larger videos are rejected
+downscale_resolution: [1280, 720]  # (width, height) for the policy's downscale action
 frame_budget_ms: null
 memory_limit_mb: null
+cpu_limit_percent: null  # 100 = one fully used core
+gpu_memory_limit_mb: null

@@ -49,9 +49,24 @@ class DegradationEstimate:
 
 
 @dataclass(frozen=True)
+class BudgetState:
+    """Latency and resource usage the policy sees before a frame; None = not measured yet."""
+
+    latency_ms: float | None = None  # moving latency of the previous frames
+    ram_mb: float | None = None
+    cpu_percent: float | None = None
+    gpu_memory_mb: float | None = None
+
+
+@dataclass(frozen=True)
 class PolicyDecision:
-    action: Action
+    action: Action  # final action, after the budget correction
     reason: str
+    base_action: Action | None = None  # action from the rule table
+    downgraded: bool = False  # the budget correction lowered the action
+    enhance: bool = False  # the enhancer runs on this frame (enhance, and every N-th frame of skip)
+    resize_to: tuple[int, int] | None = None  # (width, height) to fit the frame into, for downscale
+    budget: BudgetState = field(default_factory=BudgetState)
 
 
 @dataclass(frozen=True)
