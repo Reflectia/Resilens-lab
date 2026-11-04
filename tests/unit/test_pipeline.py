@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 import numpy as np
@@ -14,9 +15,13 @@ from resilens.core.stage import Stage
 from resilens.detection.yolox import YOLOXNanoDetector
 from resilens.detection.yolox_model import yolox_nano
 from resilens.enhancement.bypass import BypassEnhancer
+from resilens.enhancement.tanet import TANetEnhancer
+from resilens.enhancement.tanet_model import TANet
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
 from resilens.metrics.telemetry import Telemetry
+from resilens.policy.engine import PolicyEngine
+from resilens.policy.log import export_policy_log, policy_summary
 from resilens.testing.mocks import MockDetector, MockTracker, mock_frames
 from resilens.tracking.flow_tracker import FlowTracker
 
@@ -96,9 +101,69 @@ def test_analyzer_runs_first_when_mode_uses_it() -> None:
     assert isinstance(Pipeline.from_config(run_config(mode)).stages[0], DegradationAnalyzer)
 
 
-def test_modes_with_policy_are_reported_as_not_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="Policy Engine"):
-        Pipeline.from_config(run_config(load_mode("D")))
+def test_mode_d_puts_policy_between_analyzer_and_enhancer() -> None:
+    pipeline = Pipeline.from_config(run_config(load_mode("D")))
+
+    analyzer, policy, enhancer, detector, tracker = pipeline.stages
+    assert isinstance(analyzer, DegradationAnalyzer)
+    assert isinstance(policy, PolicyEngine) and policy.profile.name == "minimal"
+    assert isinstance(enhancer, TANetEnhancer) and enhancer.model is None
+    assert policy.budget_source == pipeline.telemetry.budget_state
+    assert pipeline.telemetry.latency_metric == policy.rules.config.budget.latency_metric
+
+
+def test_policy_needs_the_analyzer() -> None:
+    mode = ModeConfig(name="X", use_policy=True, detector_params={"weights_path": "w.pth"}, tracker="flow")
+
+    with pytest.raises(ValueError, match="needs the analyzer"):
+        Pipeline.from_config(run_config(mode))
+
+
+def save_random_weights(tmp_path: Path) -> tuple[Path, Path]:
+    torch.manual_seed(0)
+    yolox, tanet = tmp_path / "yolox_nano.pth", tmp_path / "tanet.pth"
+    torch.save({"model": yolox_nano().state_dict()}, yolox)
+    torch.save(TANet().state_dict(), tanet)
+    return yolox, tanet
+
+
+def test_mode_d_on_video_logs_a_decision_per_frame(tmp_path: Path, make_video) -> None:
+    """Analyzer -> policy -> TANet -> YOLOX-Nano -> flow tracker, random weights, on a real video file."""
+    yolox, tanet = save_random_weights(tmp_path)
+    mode = load_mode("D")
+    mode.enhancer_params["weights_path"] = tanet
+    mode.detector_params["weights_path"] = yolox
+    video = VideoValidator().validate(make_video("clip.mp4", frames=4, width=128, height=96))
+
+    frames = Pipeline.from_config(run_config(mode)).run(VideoReplay(video))
+    export_policy_log(frames, "minimal", tmp_path / "policy_log.csv")
+
+    assert [t.stage for t in frames[0].timings] == ["replay", "analyzer", "policy", "tanet", "yolox_nano", "flow"]
+    assert all(f.decision is not None and f.degradation is not None for f in frames)
+    with (tmp_path / "policy_log.csv").open(encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["frame"] for row in rows] == ["1", "2", "3", "4"]
+    assert {row["profile"] for row in rows} == {"minimal"}
+    assert rows[0]["action"] == frames[0].decision.action
+    assert rows[0]["ram_mb"] != ""
+    summary = policy_summary(frames)
+    action_shares = [summary[f"policy_{action}_share"] for action in ("enhance", "skip", "bypass", "downscale")]
+    assert sum(action_shares) == pytest.approx(1.0)
+
+
+def test_frames_over_the_latency_budget_are_downgraded(tmp_path: Path, make_video) -> None:
+    yolox, _ = save_random_weights(tmp_path)
+    mode = ModeConfig(name="X", use_analyzer=True, use_policy=True, detector_params={"weights_path": yolox})
+    mode.tracker = "flow"
+    profile = load_profile("minimal").model_copy(update={"frame_budget_ms": 0.001, "downscale_resolution": (64, 48)})
+    config = RunConfig(mode=mode, profile=profile, source=Path("clip.mp4"), warmup_frames=0)
+    video = VideoValidator().validate(make_video("clip.mp4", frames=3, width=128, height=96))
+
+    frames = Pipeline.from_config(config).run(VideoReplay(video))
+
+    assert not frames[0].decision.downgraded  # no latency measured before the first frame
+    assert all(f.decision.downgraded for f in frames[1:])
+    assert all("ms > budget" in f.decision.reason for f in frames[1:])
 
 
 def test_unknown_stage_in_config() -> None:

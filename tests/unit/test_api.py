@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from resilens.api.app import create_app
 from resilens.core.pipeline import Pipeline
 from resilens.detection.yolox_model import yolox_nano
+from resilens.enhancement.tanet_model import TANet
 from resilens.runs.manager import RunManager
 from resilens.testing.runs import STUB_METRICS, StubRunManager
 
@@ -256,3 +257,27 @@ def test_mode_a_runs_real_pipeline(video, uploads_dir, run_store, monkeypatch, t
     assert report["metrics"]["processed_frames"] == 10
     assert {"detections_per_frame", "tracks_per_frame"} <= report["metrics"].keys()
     assert (run_store.run_dir(run_id) / "tracks.txt").is_file()
+
+
+def test_mode_d_run_saves_policy_log_and_summary(video, uploads_dir, run_store, monkeypatch, tmp_path) -> None:
+    yolox, tanet = tmp_path / "yolox_nano.pth", tmp_path / "tanet.pth"
+    torch.save({"model": yolox_nano().state_dict()}, yolox)
+    torch.save(TANet().state_dict(), tanet)
+    build = Pipeline.from_config
+
+    def with_test_weights(config):
+        config.mode.detector_params["weights_path"] = yolox
+        config.mode.enhancer_params["weights_path"] = tanet
+        return build(config)
+
+    monkeypatch.setattr(Pipeline, "from_config", with_test_weights)
+    with TestClient(create_app(RunManager(run_store), uploads_dir)) as client:
+        run_id = post_run(client, video, mode="D").json()["run_id"]
+        wait_for_runs(client)
+        run = client.get(f"/runs/{run_id}").json()
+        metrics = client.get(f"/runs/{run_id}/report").json()["metrics"]
+
+    assert (run["status"], run["error"]) == ("completed", None)
+    log = (run_store.run_dir(run_id) / "policy_log.csv").read_text(encoding="utf-8").splitlines()
+    assert len(log) == 1 + 10  # header + one row per frame
+    assert {"policy_enhance_share", "policy_downgraded_share", "policy_enhanced_share"} <= metrics.keys()
