@@ -8,4 +8,5 @@ enhancer_params:
 detector: yolox_nano
 detector_params:
   weights_path: weights/yolox_nano_coco.pth
-tracker: bytetrack
+  class_ids: [0]  # COCO person: MOT20 ground truth annotates pedestrians only
+tracker: flow  # optical flow, targets from the first frame with detections (docs/TRACKER.md)

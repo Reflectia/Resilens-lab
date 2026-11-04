@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from resilens.core.contracts import FrameContext
+from resilens.core.contracts import Detection, FrameContext
 from resilens.tracking.flow_tracker import (
     MAX_MISSES,
     FlowTracker,
@@ -112,3 +112,34 @@ def test_mot_row_uses_one_based_frames_and_xywh() -> None:
     track = FlowTracker([START]).update([], 0, color_frame(0))[0]
 
     assert mot_row(0, track) == "1,1,40.0,80.0,40.0,80.0,1,-1,-1,-1"
+
+
+def detection(box: tuple[float, float, float, float], score: float) -> Detection:
+    x, y, w, h = box
+    return Detection(bbox=(x, y, x + w, y + h), score=score, class_id=0)
+
+
+def test_without_targets_tracker_starts_from_first_frame_with_detections() -> None:
+    tracker = FlowTracker()
+    other = (200.0, 20.0, 40.0, 80.0)
+
+    assert tracker.update([], 0, color_frame(0)) == []  # nothing detected yet
+    tracks = tracker.update([detection(other, 0.5), detection(START, 0.9)], 1, color_frame(1))
+
+    assert [(t.track_id, t.bbox) for t in tracks] == [(1, (40.0, 80.0, 80.0, 160.0)), (2, (200.0, 20.0, 240.0, 100.0))]
+
+
+def test_tracker_follows_detected_object_and_ignores_later_detections() -> None:
+    tracker = FlowTracker()
+    tracker.update([detection(START, 0.9)], 0, color_frame(0))
+    for i in range(1, 11):
+        tracks = tracker.update([detection((250.0, 10.0, 40.0, 80.0), 0.9)], i, color_frame(i))
+
+    assert [t.track_id for t in tracks] == [1]
+    assert abs(tracks[0].bbox[0] - (40 + SPEED * 10)) < 3
+
+
+def test_hand_selected_targets_ignore_detections() -> None:
+    tracks = FlowTracker([START]).update([detection((200.0, 20.0, 40.0, 80.0), 0.9)], 0, color_frame(0))
+
+    assert [t.bbox for t in tracks] == [(40.0, 80.0, 80.0, 160.0)]

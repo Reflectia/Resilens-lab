@@ -1,9 +1,20 @@
-from contextlib import AbstractContextManager
+import time
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from threading import Event, Thread
 
 import psutil
 
-from resilens.core.contracts import FrameContext
+from resilens.core.contracts import FrameContext, StageTiming
+
+
+@contextmanager
+def _stage_timer(ctx: FrameContext, stage: str) -> Iterator[None]:
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        ctx.timings.append(StageTiming(stage, (time.perf_counter() - started) * 1000))
 
 
 class ResourceSampler:
@@ -46,7 +57,8 @@ class Telemetry:
         self.resources = ResourceSampler()
 
     def stage_timer(self, ctx: FrameContext, stage: str) -> AbstractContextManager[None]:
-        pass
+        """Append the time spent inside the `with` block to ctx.timings, also when the stage raises."""
+        return _stage_timer(ctx, stage)
 
     def record_frame(self, ctx: FrameContext) -> None:
         """Store end-to-end latency and per-stage timings of a finished frame."""

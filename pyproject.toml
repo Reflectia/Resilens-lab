@@ -34,8 +34,8 @@ dependencies = [
     # Web UI
     "streamlit>=1.40",
     "httpx>=0.27",               # Web UI -> REST API client
+    # YOLOX (Apache-2.0): model code is vendored in src/resilens/detection/yolox_model.py
     # TODO: verify Python 3.13 compatibility, then pin as git dependencies:
-    #   YOLOX      https://github.com/Megvii-BaseDetection/YOLOX   (Apache-2.0)
     #   ByteTrack  https://github.com/ifzhang/ByteTrack            (MIT)
     #   TrackEval  https://github.com/JonathonLuiten/TrackEval     (MIT; HOTA, IDF1, ID switches)
 ]

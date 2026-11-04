@@ -6,10 +6,12 @@ from pathlib import Path
 from threading import Event
 
 import pytest
+import torch
 from fastapi.testclient import TestClient
 
 from resilens.api.app import create_app
 from resilens.core.pipeline import Pipeline
+from resilens.detection.yolox_model import yolox_nano
 from resilens.runs.manager import RunManager
 from resilens.testing.runs import STUB_METRICS, StubRunManager
 
@@ -222,3 +224,26 @@ def test_real_run_manager(video, uploads_dir, run_store, monkeypatch, pipeline, 
     else:
         assert "Pipeline is not implemented yet" in run["error"]
         assert report.status_code == 409
+
+
+def test_mode_a_runs_real_pipeline(video, uploads_dir, run_store, monkeypatch, tmp_path) -> None:
+    """POST /runs -> Pipeline.from_config (bypass, YOLOX-Nano with random weights, flow tracker) -> report."""
+    weights = tmp_path / "yolox_nano.pth"
+    torch.save({"model": yolox_nano().state_dict()}, weights)
+    build = Pipeline.from_config
+
+    def with_test_weights(config):
+        config.mode.detector_params["weights_path"] = weights
+        return build(config)
+
+    monkeypatch.setattr(Pipeline, "from_config", with_test_weights)
+    with TestClient(create_app(RunManager(run_store), uploads_dir)) as client:
+        run_id = post_run(client, video).json()["run_id"]
+        wait_for_runs(client)
+        run = client.get(f"/runs/{run_id}").json()
+        report = client.get(f"/runs/{run_id}/report").json()
+
+    assert (run["status"], run["error"]) == ("completed", None)
+    assert report["metrics"]["processed_frames"] == 10
+    assert {"detections_per_frame", "tracks_per_frame"} <= report["metrics"].keys()
+    assert (run_store.run_dir(run_id) / "tracks.txt").is_file()

@@ -11,6 +11,7 @@ from resilens.core.pipeline import Pipeline
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
 from resilens.metrics.telemetry import ResourceSampler
+from resilens.metrics.tracking import export_mot_detections, export_mot_format
 from resilens.reports.generator import ReportGenerator
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
@@ -57,11 +58,16 @@ class RunManager:
         processed_frames = len(frames)
         if processed_frames == 0:
             raise ValueError("Run processed no video frames")
+        run_dir = self.store.run_dir(run_id)
+        export_mot_detections(frames, run_dir / "detections.txt")
+        export_mot_format(frames, run_dir / "tracks.txt")
         return {
             "processing_time_s": elapsed_s,
             "fps": processed_frames / elapsed_s,
             "peak_ram_mb": resources["peak_ram_mb"],
             "processed_frames": float(processed_frames),
+            "detections_per_frame": sum(len(ctx.detections) for ctx in frames) / processed_frames,
+            "tracks_per_frame": sum(len(ctx.tracks) for ctx in frames) / processed_frames,
         }
 
     def compare_with_previous(self, run_id: str) -> dict:
