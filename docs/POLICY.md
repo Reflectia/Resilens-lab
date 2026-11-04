@@ -37,8 +37,8 @@ In modes B and D TANet runs on a quarter-size frame and the result is scaled bac
 
 ## Running
 
-```powershell
-curl.exe -F mode=D -F profile=standard -F replay_mode=realtime -F "video=@path/to/fog_l2.mp4" http://127.0.0.1:8000/runs
+```bash
+curl -F mode=D -F profile=standard -F replay_mode=realtime -F "video=@path/to/fog_l2.mp4" http://127.0.0.1:8000/runs
 ```
 
 `replay_mode=realtime` plays the video at its own fps and drops frames the pipeline is too slow for (`frames_dropped` in the report). `offline` (default) processes every frame.
