@@ -54,6 +54,13 @@ def test_create_run_with_video(client, run_manager, video, uploads_dir) -> None:
     assert (config.mode.name, config.profile.name) == ("A", "minimal")
     assert config.source.parent.parent == uploads_dir.resolve()
     assert config.source.read_bytes() == video.read_bytes()
+    assert config.replay_mode == "offline"
+
+
+def test_create_run_in_realtime(client, run_manager, video) -> None:
+    run_id = post_run(client, video, replay_mode="realtime").json()["run_id"]
+
+    assert run_manager.store.load_config(run_id).replay_mode == "realtime"
 
 
 def test_run_is_executed_in_background(client, video) -> None:
@@ -136,14 +143,15 @@ def test_unknown_run_is_not_found(client, path: str) -> None:
         ({"mode": "../profiles/minimal"}, "Unknown mode"),
         ({"profile": "huge"}, "Unknown profile 'huge'. Available: minimal, performance, standard"),
         ({"scenario_id": "MOT20-01/fog_l1"}, "exactly one of 'video' or 'scenario_id'"),
+        ({"replay_mode": "slow"}, "Input should be 'offline' or 'realtime'"),
     ],
-    ids=["unknown_mode", "mode_path_traversal", "unknown_profile", "video_and_scenario"],
+    ids=["unknown_mode", "mode_path_traversal", "unknown_profile", "video_and_scenario", "unknown_replay_mode"],
 )
 def test_invalid_request_is_rejected(client, run_manager, video, uploads_dir, form: dict, message: str) -> None:
     response = post_run(client, video, **form)
 
     assert response.status_code == 422
-    assert message in response.json()["detail"]
+    assert message in str(response.json()["detail"])
     assert run_manager.store.list_runs() == []
     assert not uploads_dir.exists() or not any(uploads_dir.iterdir())
 
@@ -221,6 +229,7 @@ def test_real_run_manager(video, uploads_dir, run_store, monkeypatch, pipeline, 
     if status == "completed":
         assert run["error"] is None
         assert report.json()["metrics"]["processed_frames"] == 10
+        assert report.json()["metrics"]["frames_dropped"] == 0
     else:
         assert "Pipeline is not implemented yet" in run["error"]
         assert report.status_code == 409

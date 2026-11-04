@@ -46,9 +46,10 @@ class RunManager:
 
         sampler = ResourceSampler()
         sampler.start()
+        replay = VideoReplay(video, config.replay_mode)
         started = time.perf_counter()
         try:
-            frames = pipeline.run(VideoReplay(video, config.replay_mode))
+            frames = pipeline.run(replay)
         finally:
             elapsed_s = time.perf_counter() - started
             resources = sampler.stop()
@@ -66,6 +67,7 @@ class RunManager:
             "fps": processed_frames / elapsed_s,
             "peak_ram_mb": resources["peak_ram_mb"],
             "processed_frames": float(processed_frames),
+            "frames_dropped": float(replay.frames_dropped),
             "detections_per_frame": sum(len(ctx.detections) for ctx in frames) / processed_frames,
             "tracks_per_frame": sum(len(ctx.tracks) for ctx in frames) / processed_frames,
         }
