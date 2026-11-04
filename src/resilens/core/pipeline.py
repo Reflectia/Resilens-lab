@@ -50,10 +50,11 @@ class Pipeline:
         return cls(stages, Telemetry(config.warmup_frames))
 
     def process_frame(self, ctx: FrameContext) -> FrameContext:
-        """Run all stages on one frame, recording per-stage timing."""
+        """Run all stages on one frame, recording per-stage timing and the frame's latency in telemetry."""
         for stage in self.stages:
             with self.telemetry.stage_timer(ctx, stage.name):
                 ctx = stage.process(ctx)
+        self.telemetry.record_frame(ctx)
         return ctx
 
     def run(self, frames: Iterable[FrameContext]) -> list[FrameContext]:

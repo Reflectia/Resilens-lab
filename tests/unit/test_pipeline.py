@@ -114,6 +114,7 @@ def test_stages_run_in_order_with_timings() -> None:
     assert [t.stage for t in ctx.timings] == ["mock_detector", "mock_tracker"]
     assert all(t.duration_ms >= 0 for t in ctx.timings)
     assert ctx.tracks[0].bbox == ctx.detections[0].bbox
+    assert pipeline.telemetry.latencies_ms == [sum(t.duration_ms for t in ctx.timings)]
 
 
 def test_run_sets_up_once_keeps_results_and_drops_pixels() -> None:
