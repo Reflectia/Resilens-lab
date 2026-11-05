@@ -5,6 +5,7 @@ use_policy: true
 enhancer: tanet
 enhancer_params:
   weights_path: weights/tanet.pth
+  scale: 0.25  # TANet runs on a quarter-size frame: ~0.5 s instead of ~9 s per 1080p frame on CPU
 detector: yolox_nano
 detector_params:
   weights_path: weights/yolox_nano_coco.pth

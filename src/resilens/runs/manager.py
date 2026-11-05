@@ -12,6 +12,7 @@ from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
 from resilens.metrics.telemetry import ResourceSampler
 from resilens.metrics.tracking import export_mot_detections, export_mot_format
+from resilens.policy.log import export_policy_log, policy_summary
 from resilens.reports.generator import ReportGenerator
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
@@ -46,9 +47,10 @@ class RunManager:
 
         sampler = ResourceSampler()
         sampler.start()
+        replay = VideoReplay(video, config.replay_mode)
         started = time.perf_counter()
         try:
-            frames = pipeline.run(VideoReplay(video, config.replay_mode))
+            frames = pipeline.run(replay)
         finally:
             elapsed_s = time.perf_counter() - started
             resources = sampler.stop()
@@ -61,13 +63,18 @@ class RunManager:
         run_dir = self.store.run_dir(run_id)
         export_mot_detections(frames, run_dir / "detections.txt")
         export_mot_format(frames, run_dir / "tracks.txt")
+        policy_metrics = policy_summary(frames)
+        if policy_metrics:
+            export_policy_log(frames, config.profile.name, run_dir / "policy_log.csv")
         return {
             "processing_time_s": elapsed_s,
             "fps": processed_frames / elapsed_s,
             "peak_ram_mb": resources["peak_ram_mb"],
             "processed_frames": float(processed_frames),
+            "frames_dropped": float(replay.frames_dropped),
             "detections_per_frame": sum(len(ctx.detections) for ctx in frames) / processed_frames,
             "tracks_per_frame": sum(len(ctx.tracks) for ctx in frames) / processed_frames,
+            **policy_metrics,
         }
 
     def compare_with_previous(self, run_id: str) -> dict:

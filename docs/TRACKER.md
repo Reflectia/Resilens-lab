@@ -9,7 +9,7 @@ The same file provides:
 
 ## Demonstration
 
-```powershell
+```bash
 python -m resilens.tracking.flow_tracker path/to/video.mp4 --save-video
 ```
 
@@ -24,7 +24,7 @@ python -m resilens.tracking.flow_tracker path/to/video.mp4 --save-video
 
 To show the effect of a degradation, run the same targets on the degraded clip. The `targets.json` from the first run is the input:
 
-```powershell
+```bash
 python -m resilens.tracking.flow_tracker <videos>/MOT20-01/clean.mp4 --save-video
 python -m resilens.tracking.flow_tracker <videos>/MOT20-01/fog_l2.mp4 --targets runs/tracking/MOT20-01_clean/targets.json --save-video
 ```
@@ -35,7 +35,7 @@ Results are only comparable when **every run tracks exactly the same targets**. 
 
 **1. Create the targets once per sequence.** Select them on the clean clip (as in the demo):
 
-```powershell
+```bash
 python -m resilens.tracking.flow_tracker <videos>/MOT20-01/clean.mp4
 ```
 
@@ -49,11 +49,11 @@ Keep the targets files that the benchmark uses under version control or next to 
 
 **2. Run every clip with the same targets, without windows:**
 
-```powershell
-$targets = "runs/tracking/MOT20-01_clean/targets.json"
-foreach ($clip in "clean", "fog_l1", "fog_l2", "rain_l1", "rain_l2", "low_light_l1", "low_light_l2", "motion_blur_l1", "motion_blur_l2") {
-    python -m resilens.tracking.flow_tracker "<videos>/MOT20-01/$clip.mp4" --targets $targets --no-display
-}
+```bash
+targets=runs/tracking/MOT20-01_clean/targets.json
+for clip in clean fog_l1 fog_l2 rain_l1 rain_l2 low_light_l1 low_light_l2 motion_blur_l1 motion_blur_l2; do
+    python -m resilens.tracking.flow_tracker "<videos>/MOT20-01/$clip.mp4" --targets "$targets" --no-display
+done
 ```
 
 Each run gets its own folder `runs/tracking/<sequence folder>_<clip>/`; use `--out-dir` to choose another one. Same video and same targets give identical `tracks.txt`.
@@ -71,6 +71,8 @@ ctx = tracker.process(ctx)  # every frame, after the enhancer; fills ctx.tracks
 ```
 
 In runs (`POST /runs`, mode configs with `tracker: flow`) the pipeline creates `FlowTracker()` without targets: they are the YOLOX-Nano detections of the first frame that has any, IDs 1..N by score. People who appear later are not tracked. Each run saves `detections.txt` and `tracks.txt` in MOT format to `runs/<run_id>/`.
+
+In mode D the Policy Engine may downscale some frames. The tracker then runs optical flow on the smaller frame, while boxes, targets and the MOT output stay in original video pixels.
 
 ### Outputs
 

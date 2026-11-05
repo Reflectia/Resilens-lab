@@ -29,7 +29,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from resilens.core.contracts import Detection, Track
+from resilens.core.contracts import Detection, FrameContext, Track
 from resilens.core.registry import registry
 from resilens.tracking.base import Tracker
 
@@ -104,6 +104,10 @@ def detection_boxes(detections: list[Detection]) -> list[Box]:
     return [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (d.bbox for d in ordered)]
 
 
+def scale_box(box: Box, scale: float) -> Box:
+    return (box[0] * scale, box[1] * scale, box[2] * scale, box[3] * scale)
+
+
 @registry.register("flow")
 class FlowTracker(Tracker):
     """Tracker stage with target IDs 1..N in the order of `targets`.
@@ -123,8 +127,14 @@ class FlowTracker(Tracker):
         self.misses: dict[int, int] = {}
         self._previous_gray: np.ndarray | None = None
 
-    def update(self, detections: list[Detection], frame_index: int, image: np.ndarray) -> list[Track]:
-        """Follow the targets by optical flow; detections only choose the targets when none were given."""
+    def update(
+        self, detections: list[Detection], frame_index: int, image: np.ndarray, scale: float = 1.0
+    ) -> list[Track]:
+        """Follow the targets by optical flow; detections only choose the targets when none were given.
+
+        `scale` is image width / original frame width (< 1 after the policy's downscale): flow runs on the image
+        as given, while boxes, targets and detections stay in original frame pixels.
+        """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         if self._previous_gray is None:
             targets = self.targets if self.targets is not None else detection_boxes(detections)
@@ -132,7 +142,12 @@ class FlowTracker(Tracker):
                 return []  # wait for a frame with detections
             self.tracks = {i + 1: box for i, box in enumerate(targets)}
         else:
-            self.tracks = move_tracks(self._previous_gray, gray, self.tracks, self.misses)
+            previous = self._previous_gray
+            if previous.shape != gray.shape:  # the policy changed the frame size
+                previous = cv2.resize(previous, (gray.shape[1], gray.shape[0]), interpolation=cv2.INTER_AREA)
+            scaled = {track_id: scale_box(box, scale) for track_id, box in self.tracks.items()}
+            moved = move_tracks(previous, gray, scaled, self.misses)
+            self.tracks = {track_id: scale_box(box, 1 / scale) for track_id, box in moved.items()}
         self._previous_gray = gray
 
         tracks: list[Track] = []
@@ -140,6 +155,11 @@ class FlowTracker(Tracker):
             score = 1.0 if self.misses.get(track_id, 0) == 0 else 0.0
             tracks.append(Track(track_id, (x, y, x + w, y + h), score, PERSON_CLASS_ID))
         return tracks
+
+    def process(self, ctx: FrameContext) -> FrameContext:
+        image = ctx.working_image
+        ctx.tracks = self.update(ctx.detections, ctx.index, image, scale=image.shape[1] / ctx.image.shape[1])
+        return ctx
 
 
 # --------------------------------------------------------------------------- command line

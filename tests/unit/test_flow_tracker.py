@@ -143,3 +143,17 @@ def test_hand_selected_targets_ignore_detections() -> None:
     tracks = FlowTracker([START]).update([detection((200.0, 20.0, 40.0, 80.0), 0.9)], 0, color_frame(0))
 
     assert [t.bbox for t in tracks] == [(40.0, 80.0, 80.0, 160.0)]
+
+
+def test_tracker_keeps_original_pixels_when_policy_downscales_some_frames() -> None:
+    tracker = FlowTracker([START])
+    for i in range(11):
+        full = color_frame(i)
+        ctx = FrameContext(index=i, timestamp_s=i / 25, image=full)
+        if i % 2:  # every other frame arrives at half size, as after the policy's downscale
+            ctx.enhanced = cv2.resize(full, (160, 120), interpolation=cv2.INTER_AREA)
+        tracks = tracker.process(ctx).tracks
+
+    assert abs(tracks[0].bbox[0] - (40 + SPEED * 10)) < 3
+    assert abs(tracks[0].bbox[1] - 80) < 3
+    assert tracks[0].bbox[2] - tracks[0].bbox[0] == 40.0

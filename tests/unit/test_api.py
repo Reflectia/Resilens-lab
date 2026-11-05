@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from resilens.api.app import create_app
 from resilens.core.pipeline import Pipeline
 from resilens.detection.yolox_model import yolox_nano
+from resilens.enhancement.tanet_model import TANet
 from resilens.runs.manager import RunManager
 from resilens.testing.runs import STUB_METRICS, StubRunManager
 
@@ -54,6 +55,13 @@ def test_create_run_with_video(client, run_manager, video, uploads_dir) -> None:
     assert (config.mode.name, config.profile.name) == ("A", "minimal")
     assert config.source.parent.parent == uploads_dir.resolve()
     assert config.source.read_bytes() == video.read_bytes()
+    assert config.replay_mode == "offline"
+
+
+def test_create_run_in_realtime(client, run_manager, video) -> None:
+    run_id = post_run(client, video, replay_mode="realtime").json()["run_id"]
+
+    assert run_manager.store.load_config(run_id).replay_mode == "realtime"
 
 
 def test_run_is_executed_in_background(client, video) -> None:
@@ -136,14 +144,15 @@ def test_unknown_run_is_not_found(client, path: str) -> None:
         ({"mode": "../profiles/minimal"}, "Unknown mode"),
         ({"profile": "huge"}, "Unknown profile 'huge'. Available: minimal, performance, standard"),
         ({"scenario_id": "MOT20-01/fog_l1"}, "exactly one of 'video' or 'scenario_id'"),
+        ({"replay_mode": "slow"}, "Input should be 'offline' or 'realtime'"),
     ],
-    ids=["unknown_mode", "mode_path_traversal", "unknown_profile", "video_and_scenario"],
+    ids=["unknown_mode", "mode_path_traversal", "unknown_profile", "video_and_scenario", "unknown_replay_mode"],
 )
 def test_invalid_request_is_rejected(client, run_manager, video, uploads_dir, form: dict, message: str) -> None:
     response = post_run(client, video, **form)
 
     assert response.status_code == 422
-    assert message in response.json()["detail"]
+    assert message in str(response.json()["detail"])
     assert run_manager.store.list_runs() == []
     assert not uploads_dir.exists() or not any(uploads_dir.iterdir())
 
@@ -221,6 +230,7 @@ def test_real_run_manager(video, uploads_dir, run_store, monkeypatch, pipeline, 
     if status == "completed":
         assert run["error"] is None
         assert report.json()["metrics"]["processed_frames"] == 10
+        assert report.json()["metrics"]["frames_dropped"] == 0
     else:
         assert "Pipeline is not implemented yet" in run["error"]
         assert report.status_code == 409
@@ -247,3 +257,27 @@ def test_mode_a_runs_real_pipeline(video, uploads_dir, run_store, monkeypatch, t
     assert report["metrics"]["processed_frames"] == 10
     assert {"detections_per_frame", "tracks_per_frame"} <= report["metrics"].keys()
     assert (run_store.run_dir(run_id) / "tracks.txt").is_file()
+
+
+def test_mode_d_run_saves_policy_log_and_summary(video, uploads_dir, run_store, monkeypatch, tmp_path) -> None:
+    yolox, tanet = tmp_path / "yolox_nano.pth", tmp_path / "tanet.pth"
+    torch.save({"model": yolox_nano().state_dict()}, yolox)
+    torch.save(TANet().state_dict(), tanet)
+    build = Pipeline.from_config
+
+    def with_test_weights(config):
+        config.mode.detector_params["weights_path"] = yolox
+        config.mode.enhancer_params["weights_path"] = tanet
+        return build(config)
+
+    monkeypatch.setattr(Pipeline, "from_config", with_test_weights)
+    with TestClient(create_app(RunManager(run_store), uploads_dir)) as client:
+        run_id = post_run(client, video, mode="D").json()["run_id"]
+        wait_for_runs(client)
+        run = client.get(f"/runs/{run_id}").json()
+        metrics = client.get(f"/runs/{run_id}/report").json()["metrics"]
+
+    assert (run["status"], run["error"]) == ("completed", None)
+    log = (run_store.run_dir(run_id) / "policy_log.csv").read_text(encoding="utf-8").splitlines()
+    assert len(log) == 1 + 10  # header + one row per frame
+    assert {"policy_enhance_share", "policy_downgraded_share", "policy_enhanced_share"} <= metrics.keys()

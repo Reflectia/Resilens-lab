@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from resilens.api.schemas import RunCreated, RunInfo, RunReport, ScenarioInfo
 from resilens.api.worker import RunQueue
 from resilens.config.loader import available_modes, available_profiles, build_run_config
+from resilens.config.schema import ReplayMode
 from resilens.io.validation import SUPPORTED_EXTENSIONS, VideoValidationError, VideoValidator
 from resilens.runs.manager import RunManager
 from resilens.runs.models import RunNotFoundError, RunRecord, RunStatus
@@ -60,6 +61,7 @@ def create_run(
     profile: str = Form(...),
     video: UploadFile | None = File(None),
     scenario_id: str | None = Form(None),
+    replay_mode: ReplayMode = Form(ReplayMode.OFFLINE),
     manager: RunManager = Depends(get_manager),
     queue: RunQueue = Depends(get_queue),
     uploads_dir: Path = Depends(get_uploads_dir),
@@ -77,7 +79,7 @@ def create_run(
 
     source = save_upload(video, uploads_dir)
     try:
-        run_id = manager.submit(build_run_config(mode, profile, source))
+        run_id = manager.submit(build_run_config(mode, profile, source, replay_mode=replay_mode))
     except Exception:
         shutil.rmtree(source.parent, ignore_errors=True)
         raise
