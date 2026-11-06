@@ -55,8 +55,7 @@ class RunManager:
                 raise ValueError("Detector confidence threshold cannot exceed evaluation threshold 0.3")
             images = json.loads(config.annotations.read_text(encoding="utf-8"))["images"]
             if len(images) != video.frame_count or any(
-                image["width"] != video.width or image["height"] != video.height
-                for image in images
+                image["width"] != video.width or image["height"] != video.height for image in images
             ):
                 raise ValueError("COCO annotations do not match video frame count or dimensions")
             validate_annotation_pair(config.annotations, config.tracking_annotations)
