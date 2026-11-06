@@ -131,6 +131,7 @@ class RunConfig(BaseModel):
     profile: ProfileConfig
     source: Path
     annotations: Path | None = None  # ground truth, only for control videos
+    tracking_annotations: Path | None = None
     replay_mode: ReplayMode = ReplayMode.OFFLINE
     seed: int = 0
     warmup_frames: int = 10
