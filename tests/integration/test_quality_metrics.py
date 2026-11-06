@@ -321,6 +321,10 @@ def test_benchmark_resumes_completed_scenario_and_compares(tmp_path, make_video,
     )
     monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
     monkeypatch.setattr(cli, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(cli, "DATA_DIR", tmp_path)
+    cli.main(["benchmark", "--modes", "A"])
+    default_progress = tmp_path / "runs" / "benchmark.json"
+    assert json.loads(default_progress.read_text())[0]["status"] == "completed"
     progress, comparison = tmp_path / "progress.json", tmp_path / "comparison.json"
     command = ["benchmark", "--manifest", str(manifest), "--scenario", video.name, "--output", str(progress)]
     cli.main(command)
@@ -342,3 +346,13 @@ def test_benchmark_resumes_completed_scenario_and_compares(tmp_path, make_video,
     report = json.loads(comparison.read_text())
     assert len(report["scenarios"]) == 1
     assert report["excluded"][0]["run_id"] == unpaired
+
+
+def test_benchmark_reports_missing_default_manifest(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(cli, "RUNS_DIR", tmp_path / "runs")
+    with pytest.raises(SystemExit) as error:
+        cli.main(["benchmark"])
+    assert error.value.code == 1
+    assert "manifest.json" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()
