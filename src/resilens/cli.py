@@ -11,7 +11,7 @@ from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidationError, VideoValidator
 from resilens.reports.generator import ReportGenerator
 from resilens.runs.models import RunNotFoundError, RunStatus
-from resilens.runs.store import RunStore
+from resilens.runs.store import RunStore, _write_json
 
 FRAME_TABLE_HEADER = f"{'frame':>7} {'time_s':>9} {'read_ms':>9} {'avg_ms':>9} {'fps':>8} {'ram_mb':>9}"
 
@@ -57,12 +57,193 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> None:
-    pass
+def cmd_run(args: argparse.Namespace) -> int:
+    from resilens.config.loader import build_run_config
+    from resilens.runs.manager import RunManager
+
+    manager = RunManager(RunStore(RUNS_DIR), recover_interrupted=False)
+    config = build_run_config(
+        args.mode,
+        args.profile,
+        args.video,
+        annotations=args.annotations,
+        tracking_annotations=args.tracking_annotations,
+        replay_mode=args.replay,
+    )
+    run_id = manager.submit(config)
+    manager.execute(run_id)
+    record = manager.store.get(run_id)
+    print(json.dumps({"run_id": run_id, "status": record.status, "error": record.error}))
+    return 0 if record.status == RunStatus.COMPLETED else 1
 
 
-def cmd_benchmark(args: argparse.Namespace) -> None:
-    pass
+def _verify_benchmark_resume(manager, existing: dict, entry: dict, args: argparse.Namespace) -> None:
+    run_id = existing["run_id"]
+    record = manager.store.get(run_id)
+    config = manager.store.load_config(run_id)
+    if record.status != RunStatus.COMPLETED or config.profile.name != args.profile:
+        raise ValueError(f"Saved benchmark run is incompatible: {run_id}")
+    current_source = (args.manifest.parent / entry["file"]).resolve()
+    if config.source.resolve() != current_source:
+        raise ValueError(f"Saved benchmark source differs: {run_id}")
+    if (
+        config.annotations.resolve() != (args.manifest.parent / entry["gt_coco"]).resolve()
+        or config.tracking_annotations.resolve() != (args.manifest.parent / entry["gt_mot"]).resolve()
+    ):
+        raise ValueError(f"Saved benchmark annotations differ: {run_id}")
+    manager.store.verify_source(run_id)
+    manager.store.verify_annotations(run_id)
+
+
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    from resilens.config.loader import build_run_config
+    from resilens.runs.manager import RunManager
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    scenarios = manifest["test_cases"]
+    if args.scenario:
+        scenarios = [entry for entry in scenarios if entry["file"] in args.scenario]
+        if len(scenarios) != len(set(args.scenario)):
+            raise ValueError("Some requested scenarios were not found")
+    manager = RunManager(RunStore(RUNS_DIR), recover_interrupted=False)
+    results = json.loads(args.output.read_text(encoding="utf-8")) if args.output.exists() else []
+    for entry in scenarios:
+        for mode in args.modes:
+            existing = next(
+                (
+                    r
+                    for r in results
+                    if r["scenario"] == entry["file"] and r["mode"] == mode and r["status"] == "completed"
+                ),
+                None,
+            )
+            if existing:
+                _verify_benchmark_resume(manager, existing, entry, args)
+                continue
+            results = [r for r in results if not (r["scenario"] == entry["file"] and r["mode"] == mode)]
+            config = build_run_config(
+                mode,
+                args.profile,
+                args.manifest.parent / entry["file"],
+                annotations=args.manifest.parent / entry["gt_coco"],
+                tracking_annotations=args.manifest.parent / entry["gt_mot"],
+            )
+            run_id = manager.submit(config)
+            manager.execute(run_id)
+            record = manager.store.get(run_id)
+            result = {
+                "scenario": entry["file"],
+                "mode": mode,
+                "run_id": run_id,
+                "status": record.status,
+                "error": record.error,
+            }
+            results.append(result)
+            print(json.dumps(result), flush=True)
+            _write_json(args.output, results)
+    return 1 if any(result["status"] != RunStatus.COMPLETED for result in results) else 0
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    from resilens.metrics.aggregate import aggregate_runs
+
+    store = RunStore(RUNS_DIR)
+    try:
+        run_ids = list(args.run_ids)
+        excluded = []
+        if args.benchmark:
+            entries = json.loads(args.benchmark.read_text(encoding="utf-8"))
+            excluded.extend(
+                {"run_id": entry["run_id"], "reason": entry["status"]}
+                for entry in entries
+                if entry["status"] != "completed"
+            )
+            run_ids.extend(entry["run_id"] for entry in entries if entry["status"] == "completed")
+        if not run_ids:
+            raise ValueError("No runs provided")
+        records = [store.get(run_id) for run_id in run_ids]
+        by_video = {}
+        for record in records:
+            if record.status != RunStatus.COMPLETED:
+                excluded.append({"run_id": record.run_id, "reason": record.status.value})
+                continue
+            fingerprint = json.loads((store.run_dir(record.run_id) / "fingerprint.json").read_text())["source_sha256"]
+            if record.mode not in ("A", "B"):
+                raise ValueError("Only A and B runs can be compared")
+            group = by_video.setdefault(fingerprint, {})
+            if record.mode in group:
+                raise ValueError("Duplicate mode for video")
+            group[record.mode] = record.run_id
+        for video_hash, pair in list(by_video.items()):
+            if set(pair) != {"A", "B"}:
+                excluded.extend(
+                    {"run_id": run_id, "reason": "video has no completed A/B pair"} for run_id in pair.values()
+                )
+                del by_video[video_hash]
+        if not by_video:
+            raise ValueError("No completed A/B video pairs available")
+        if not args.manifest:
+            raise ValueError("A manifest is required for grouping by distortion and level")
+        entries = json.loads(args.manifest.read_text(encoding="utf-8"))["test_cases"]
+        manifest = {str((args.manifest.parent / e["file"]).resolve()): e for e in entries}
+        scenarios = []
+        groups = {}
+        for pair in by_video.values():
+            source = str(store.load_config(pair["A"]).source.resolve())
+            entry = manifest.get(source)
+            if entry is None:
+                raise ValueError(f"Video is absent from manifest: {source}")
+            from resilens.runs.fingerprint import file_sha256
+
+            expected = {
+                "annotations_sha256": file_sha256(args.manifest.parent / entry["gt_coco"]),
+                "tracking_annotations_sha256": file_sha256(args.manifest.parent / entry["gt_mot"]),
+            }
+            for run_id in pair.values():
+                fingerprint = json.loads((store.run_dir(run_id) / "fingerprint.json").read_text(encoding="utf-8"))
+                if any(fingerprint.get(key) != value for key, value in expected.items()):
+                    raise ValueError(f"Run annotations do not match manifest: {run_id}")
+            item = {"scenario": entry["file"]}
+            for mode, run_id in pair.items():
+                metrics = store.load_metrics(run_id)
+                if not {"map_50_95", "hota", "idf1"} <= metrics.keys():
+                    raise ValueError("Runs must have quality metrics")
+                keys = (
+                    "map_50_95",
+                    "precision",
+                    "recall",
+                    "hota",
+                    "idf1",
+                    "id_switches",
+                    "detection_confidence_threshold",
+                )
+                item[mode] = {"run_id": run_id, "metrics": {key: metrics[key] for key in keys}}
+            scenarios.append(item)
+            key = (entry["distortion"], entry["level"])
+            groups.setdefault(key, []).append(pair)
+
+        def summarize(pairs):
+            return {mode: aggregate_runs(store, [pair[mode] for pair in pairs]) for mode in ("A", "B")}
+
+        report = {
+            "excluded": excluded,
+            "scenarios": scenarios,
+            "groups": [
+                {"distortion": kind, "level": level, "metrics": summarize(pairs)}
+                for (kind, level), pairs in groups.items()
+            ],
+            "overall": summarize(list(by_video.values())),
+            "notes": [
+                "mAP uses detections with confidence >= 0.3",
+                "Tracking uses full person ground truth, including score-zero tracks.",
+                "FlowTracker cannot add later objects or recover lost targets.",
+            ],
+        }
+        args.output.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
+        return 0
+    except (OSError, KeyError, ValueError) as error:
+        print(f"Cannot compare runs: {error}", file=sys.stderr)
+        return 1
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -103,18 +284,28 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--mode", default="A", choices=["A", "B", "C", "D", "E"])
     run.add_argument("--profile", default="minimal")
     run.add_argument("--annotations", type=Path)
+    run.add_argument("--tracking-annotations", type=Path)
     run.add_argument("--replay", default="offline", choices=["offline", "realtime"])
     run.set_defaults(func=cmd_run)
 
     bench = sub.add_parser("benchmark", help="compare modes on scenarios")
-    bench.add_argument("--modes", nargs="+", default=["A", "B", "C", "D", "E"])
+    bench.add_argument("--modes", nargs="+", choices=["A", "B"], default=["A", "B"])
     bench.add_argument("--profile", default="minimal")
-    bench.add_argument("--repeats", type=int, default=3)
+    bench.add_argument("--manifest", type=Path, required=True)
+    bench.add_argument("--scenario", action="append", help="video path from manifest; repeat to select multiple")
+    bench.add_argument("--output", type=Path, required=True)
     bench.set_defaults(func=cmd_benchmark)
 
     report = sub.add_parser("report", help="build reports")
     report.add_argument("run_ids", nargs="+")
     report.set_defaults(func=cmd_report)
+
+    compare = sub.add_parser("compare", help="compare completed A and B runs")
+    compare.add_argument("run_ids", nargs="*")
+    compare.add_argument("--benchmark", type=Path, help="benchmark JSON containing completed run IDs")
+    compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--manifest", type=Path, help="manifest used for degradation grouping")
+    compare.set_defaults(func=cmd_compare)
 
     scen = sub.add_parser("build-scenarios", help="generate degraded control clips")
     scen.add_argument("source_dir", type=Path)

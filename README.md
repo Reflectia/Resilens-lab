@@ -17,6 +17,46 @@ Put model weights into `weights/` and videos and scenarios into `data/` (both fo
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
+### Quality benchmark (T-12)
+
+For annotated control videos, provide both COCO detection annotations and MOT tracking annotations. Videos without
+annotations still run, but have no detection or tracking quality metrics. Paths may point outside the repository.
+
+```powershell
+python -m resilens.cli benchmark --manifest "B:\Frogs Vision\data\manifest.json" --profile minimal --output runs\benchmark.json
+```
+
+The benchmark defaults to all manifest scenarios in offline mode for A and B. To select a scenario, repeat
+`--scenario` with a video path from the manifest, for example `--scenario control_videos/MOT20-01/clean.mp4`.
+Do not start or restart the API while a CLI benchmark is running: the API's existing recovery logic can mark an
+active CLI run as interrupted.
+The output records each run ID and status as the runs complete. Repeating the command with the same output resumes
+completed scenarios after verifying their inputs. Use the benchmark output to generate a comparison:
+
+```powershell
+python -m resilens.cli compare --benchmark runs\benchmark.json --manifest "B:\Frogs Vision\data\manifest.json" --output runs\comparison.json
+```
+
+Alternatively, pass completed A/B run IDs directly. Each pair must use the same video contents. The comparison includes
+per-scenario metrics, pooled overall metrics, and groups by distortion and level from the required manifest.
+Detection metrics use COCO evaluation; tracking metrics combine sequences with TrackEval. The detection confidence
+threshold is 0.3, so mAP50–95 describes only detections surviving that cutoff, not a full low-confidence PR curve.
+COCO mAP uses its standard limit of 100 detections per image; precision and recall use IoU 0.5 and all retained
+detections. Tracking uses the MOT20 distractor preprocessing and full marked person ground truth,
+and includes score-zero waiting boxes. COCO and MOT person boxes must match. Annotation hashes are checked before
+evaluation and aggregation; matching dimensions and annotation files alone cannot prove an arbitrary video belongs
+to a ground-truth sequence, so select matching entries from the trusted manifest.
+For the provided MOT20-03 videos, the original 1173-pixel frames were encoded at 1172 pixels wide. Comparing
+frames 1, 51, 151 and 300 with the original MOT20 archive supports a one-pixel crop at the right edge; feature
+matching of the degraded variants against the clean video supports the same alignment. The explicit benchmark flag
+records this assumption per run and keeps original bounding-box coordinates. It must only be used for this verified
+dataset; it does not resize images or alter the ground truth. Without the flag, the mismatch fails validation.
+This is an alignment assumption supported by sampled frames, not proof of every frame's transformation. In the
+provided MOT20-03 annotations, 35 boxes cross the new right edge; retaining their original coordinates may slightly
+affect their IoU. Results should be interpreted with this one-pixel boundary limitation.
+FlowTracker only initializes targets from the first detected frame; it cannot add later people or recover lost targets.
+Consequently its full-ground-truth tracking scores reflect those limitations.
+
 ```bash
 uvicorn resilens.api.app:app --reload    # REST API: http://127.0.0.1:8000/docs
 streamlit run src/resilens/ui/app.py     # Web UI:   http://localhost:8501
