@@ -10,6 +10,7 @@ import psutil
 import torch
 
 from resilens.core.contracts import BudgetState, FrameContext, StageTiming
+from resilens.metrics.latency import LatencySummary, frame_latency_ms, summarize_latencies
 
 
 @contextmanager
@@ -83,7 +84,7 @@ class Telemetry:
 
     def record_frame(self, ctx: FrameContext) -> None:
         """Store end-to-end latency (sum of ctx.timings, frame reading included) of a finished frame."""
-        latency_ms = sum(timing.duration_ms for timing in ctx.timings)
+        latency_ms = frame_latency_ms(ctx)
         self.latencies_ms.append(latency_ms)
         if len(self.latencies_ms) > self.warmup_frames:
             self._recent_ms.append(latency_ms)
@@ -105,6 +106,6 @@ class Telemetry:
             gpu_memory_mb=gpu_memory_mb,
         )
 
-    def summary(self) -> dict:
-        """Latency summary plus peak resource usage."""
-        pass
+    def summary(self, frame_budget_ms: float | None = None) -> LatencySummary:
+        """FPS, p50 / p95 and the share of frames within the budget, after warm-up."""
+        return summarize_latencies(self.latencies_ms, frame_budget_ms, self.warmup_frames)

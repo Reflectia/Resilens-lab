@@ -12,6 +12,7 @@ from resilens.core.pipeline import Pipeline
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
 from resilens.metrics.detection import compute_detection_metrics, validate_annotation_pair
+from resilens.metrics.latency import latency_metrics
 from resilens.metrics.telemetry import ResourceSampler
 from resilens.metrics.tracking import compute_tracking_metrics, export_mot_detections, export_mot_format
 from resilens.policy.log import export_policy_log, policy_summary
@@ -110,6 +111,7 @@ class RunManager:
             "frames_dropped": float(replay.frames_dropped),
             "detections_per_frame": sum(len(ctx.detections) for ctx in frames) / processed_frames,
             "tracks_per_frame": sum(len(ctx.tracks) for ctx in frames) / processed_frames,
+            **latency_metrics(frames, config.profile.frame_budget_ms, config.warmup_frames),
             **policy_metrics,
             **quality_metrics,
         }
