@@ -1,18 +1,39 @@
 import shutil
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse
 
 from resilens.api.schemas import RunCreated, RunInfo, RunReport, ScenarioInfo
 from resilens.api.worker import RunQueue
-from resilens.config.loader import available_modes, available_profiles, build_run_config
-from resilens.config.schema import ReplayMode
+from resilens.config.loader import (
+    available_modes,
+    available_profiles,
+    build_run_config,
+    load_mode,
+    load_profile,
+)
+from resilens.config.schema import ModeConfig, ProfileConfig, ReplayMode
 from resilens.io.validation import SUPPORTED_EXTENSIONS, VideoValidationError, VideoValidator
+from resilens.reports.annotated_video import ANNOTATED_VIDEO, render_annotated_video
 from resilens.runs.manager import RunManager
 from resilens.runs.models import RunNotFoundError, RunRecord, RunStatus
 
 router = APIRouter()
+
+# Artifacts of runs/<run_id>/ the API serves, with their media types
+RUN_FILES = {
+    "config.json": "application/json",
+    "fingerprint.json": "application/json",
+    "metrics.json": "application/json",
+    "report.json": "application/json",
+    "detections.txt": "text/plain",
+    "tracks.txt": "text/plain",
+    "policy_log.csv": "text/csv",
+}
+_render_lock = Lock()  # one annotated video is rendered at a time
 
 
 def get_manager(request: Request) -> RunManager:
@@ -108,6 +129,61 @@ def get_report(run_id: str, manager: RunManager = Depends(get_manager)) -> RunRe
     return RunReport(
         run_id=run_id, mode=record.mode, profile=record.profile, metrics=manager.store.load_metrics(run_id)
     )
+
+
+def get_completed_dir(manager: RunManager, run_id: str) -> Path:
+    record = get_record(manager, run_id)
+    if record.status != RunStatus.COMPLETED:
+        raise HTTPException(409, f"Run '{run_id}' is {record.status}, its results are available once it is completed")
+    return manager.store.run_dir(run_id)
+
+
+@router.get("/runs/{run_id}/files", response_model=list[str])
+def list_run_files(run_id: str, manager: RunManager = Depends(get_manager)) -> list[str]:
+    """Names of the run artifacts that exist, in the order of RUN_FILES."""
+    get_record(manager, run_id)
+    run_dir = manager.store.run_dir(run_id)
+    return [name for name in RUN_FILES if (run_dir / name).is_file()]
+
+
+@router.get("/runs/{run_id}/files/{name}")
+def get_run_file(run_id: str, name: str, manager: RunManager = Depends(get_manager)) -> FileResponse:
+    """One artifact of a run: config snapshot, metrics, MOT detections and tracks, policy log."""
+    get_record(manager, run_id)
+    path = manager.store.run_dir(run_id) / name
+    if name not in RUN_FILES or not path.is_file():
+        raise HTTPException(404, f"Run '{run_id}' has no file '{name}'")
+    return FileResponse(path, media_type=RUN_FILES[name], filename=name)
+
+
+@router.get("/runs/{run_id}/video")
+def get_annotated_video(run_id: str, manager: RunManager = Depends(get_manager)) -> FileResponse:
+    """Source video with the run's tracks and detections drawn on it (WebM), rendered on the first request."""
+    run_dir = get_completed_dir(manager, run_id)
+    output = run_dir / ANNOTATED_VIDEO
+    with _render_lock:
+        if not output.is_file():
+            if not (run_dir / "tracks.txt").is_file():
+                raise HTTPException(404, f"Run '{run_id}' has no tracks to draw")
+            source = manager.store.get(run_id).source
+            if not source.is_file():
+                raise HTTPException(404, f"Source video of run '{run_id}' is no longer available: {source.name}")
+            render_annotated_video(
+                source, output, run_dir / "detections.txt", run_dir / "tracks.txt", run_dir / "policy_log.csv"
+            )
+    return FileResponse(output, media_type="video/webm", filename=f"{run_id}.webm")
+
+
+@router.get("/modes", response_model=list[ModeConfig])
+def list_modes() -> list[ModeConfig]:
+    """Mode presets A–E from configs/modes/: which stages each one runs."""
+    return [load_mode(name) for name in available_modes()]
+
+
+@router.get("/profiles", response_model=list[ProfileConfig])
+def list_profiles() -> list[ProfileConfig]:
+    """Resource profiles from configs/profiles/ with their limits."""
+    return [load_profile(name) for name in available_profiles()]
 
 
 @router.get("/scenarios", response_model=list[ScenarioInfo])

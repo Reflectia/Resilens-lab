@@ -15,6 +15,7 @@ class RunInfo(BaseModel):
     status: RunStatus
     mode: str
     profile: str
+    source_name: str
     created_at: datetime
     finished_at: datetime | None = None
     error: str | None = None
@@ -26,6 +27,7 @@ class RunInfo(BaseModel):
             status=record.status,
             mode=record.mode,
             profile=record.profile,
+            source_name=record.source.name,
             created_at=record.created_at,
             finished_at=record.finished_at,
             error=record.error,
