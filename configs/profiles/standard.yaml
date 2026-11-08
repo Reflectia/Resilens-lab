@@ -1,6 +1,6 @@
 name: standard
 device: cpu
-cpu_threads: null
+cpu_threads: 4  # matches docker-compose.standard.yml (proposal, T-20)
 max_resolution: null  # (width, height); larger videos are rejected
 downscale_resolution: [1280, 720]  # (width, height) for the policy's downscale action
 frame_budget_ms: null

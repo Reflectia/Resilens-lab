@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 import torch
@@ -228,3 +229,40 @@ def test_mode_a_on_video_with_real_stages(tmp_path: Path, make_video) -> None:
 
 def test_no_pixels_is_an_empty_image() -> None:
     assert NO_PIXELS.size == 0 and NO_PIXELS.dtype == np.uint8
+
+
+class ThreadRecorder(Stage):
+    name = "threads"
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[int, int]] = []
+
+    def process(self, ctx: FrameContext) -> FrameContext:
+        self.seen.append((torch.get_num_threads(), cv2.getNumThreads()))
+        return ctx
+
+
+def test_profile_cpu_threads_limit_the_run_and_are_restored() -> None:
+    before = (torch.get_num_threads(), cv2.getNumThreads())
+    recorder = ThreadRecorder()
+
+    Pipeline([recorder], Telemetry(), cpu_threads=1).run(mock_frames(count=2))
+
+    assert recorder.seen == [(1, 1), (1, 1)]
+    assert (torch.get_num_threads(), cv2.getNumThreads()) == before
+
+
+def test_threads_are_restored_when_a_stage_fails() -> None:
+    before = torch.get_num_threads()
+
+    with pytest.raises(RuntimeError):
+        Pipeline([Recorder("a", [], fail_on=0)], Telemetry(), cpu_threads=1).run(mock_frames(count=1))
+
+    assert torch.get_num_threads() == before
+
+
+def test_profile_cpu_threads_reach_the_pipeline() -> None:
+    profile = load_profile("minimal").model_copy(update={"cpu_threads": 2})
+    config = RunConfig(mode=load_mode("A"), profile=profile, source=Path("clip.mp4"))
+
+    assert Pipeline.from_config(config).cpu_threads == 2

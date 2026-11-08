@@ -1,6 +1,6 @@
 name: minimal
 device: cpu
-cpu_threads: null
+cpu_threads: 2  # matches docker-compose.minimal.yml (proposal, T-20)
 max_resolution: null  # (width, height); larger videos are rejected
 downscale_resolution: [960, 540]  # (width, height) for the policy's downscale action
 frame_budget_ms: null

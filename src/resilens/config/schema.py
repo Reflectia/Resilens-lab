@@ -22,7 +22,7 @@ class ProfileConfig(BaseModel):
 
     name: str
     device: Device = Device.CPU
-    cpu_threads: int | None = None
+    cpu_threads: int | None = Field(None, ge=1)  # PyTorch and OpenCV threads during a run; None = all cores
     max_resolution: tuple[int, int] | None = None  # (width, height); larger videos are rejected
     downscale_resolution: tuple[int, int] | None = None  # (width, height) the policy's downscale action fits into
     frame_budget_ms: float | None = None

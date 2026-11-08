@@ -1,0 +1,8 @@
+# Standard profile hardware (proposal, T-20): 4 CPUs, 8 GB RAM, no GPU.
+#   docker compose -f docker-compose.yml -f docker-compose.standard.yml up --build
+services:
+  api:
+    cpus: "4"
+    mem_limit: 8g
+    volumes:
+      - ./benchmarks:/app/benchmarks
