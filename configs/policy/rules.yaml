@@ -3,7 +3,7 @@
 # Levels: 1 = low, 2 = high. unknown, none and anything without a rule get default_action.
 # TANet only removes rain and fog; low light and motion blur stay bypass until they get their own method.
 
-skip_every_n: 7  # skip: TANet on every N-th frame; N >= TANet / (budget - other stages) on standard (docs/PROFILES.md)
+skip_every_n: 11  # skip: TANet on every N-th frame; N >= TANet / (budget - other stages) on standard (docs/PROFILES.md)
 downgrade_order: [enhance, skip, bypass, downscale]
 default_action: bypass
 
