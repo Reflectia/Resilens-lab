@@ -128,7 +128,8 @@ def test_skip_enhances_every_nth_frame(rules: RuleTable) -> None:
     decisions = [policy.decide(estimate(RAIN, 1), NO_BUDGET) for _ in range(7)]
 
     assert {d.action for d in decisions} == {SKIP}
-    assert [d.enhance for d in decisions] == [True, False, False, True, False, False, True]
+    n = rules.config.skip_every_n
+    assert [d.enhance for d in decisions] == [i % n == 0 for i in range(7)]
 
 
 def test_skip_counter_restarts_with_setup(rules: RuleTable) -> None:
