@@ -19,7 +19,7 @@ YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDete
 
 ### Quality benchmark
 
-The benchmark compares modes A and B on annotated videos. Each scenario needs matching COCO and MOT annotations.
+The benchmark runs modes on annotated videos (`--modes`, default `A B`) and compares each of them with mode A, the reference. Each scenario needs matching COCO and MOT annotations.
 From the project directory, run all scenarios in `data/manifest.json`:
 
 ```bash
@@ -35,13 +35,13 @@ python -m resilens.cli benchmark --manifest /path/to/manifest.json --scenario co
 Progress is saved in `runs/benchmark.json`; each run's metrics and report are in `runs/<run_id>/`. Use `--output`
 to choose another progress file. Running the same command again resumes completed scenarios after checking inputs.
 
-Create a comparison of completed A/B pairs:
+Create a comparison of the completed runs (every video needs a run in each compared mode, mode A included):
 
 ```bash
 python -m resilens.cli compare --benchmark runs/benchmark.json --manifest data/manifest.json --output runs/comparison.json
 ```
 
-The comparison contains metrics per scenario, by distortion and level, and overall. Detection evaluation uses a
+The comparison contains quality metrics and speed and resources (latency p50/p95, peak RAM/CPU/GPU) per scenario, by distortion and level, and overall. Detection evaluation uses a
 confidence threshold of 0.3. FlowTracker cannot add new targets later or recover lost targets, which affects tracking
 scores. Videos without annotations can be processed with `run`, but do not have quality metrics.
 For annotated realtime runs, dropped frames count as frames without detections or tracks in quality metrics.

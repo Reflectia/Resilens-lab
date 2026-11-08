@@ -163,6 +163,8 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
     assert metrics["id_switches"] == 0
     other = manager.submit(config.model_copy(update={"mode": ModeConfig(name="B")}))
     manager.execute(other)
+    adaptive = manager.submit(config.model_copy(update={"mode": ModeConfig(name="D")}))
+    manager.execute(adaptive)
     monkeypatch.setattr(cli, "RUNS_DIR", store.root)
     output = tmp_path / "comparison.json"
     manifest = tmp_path / "manifest.json"
@@ -175,8 +177,13 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
             }
         )
     )
-    cli.main(["compare", run_id, other, "--output", str(output), "--manifest", str(manifest)])
+    cli.main(["compare", run_id, other, adaptive, "--output", str(output), "--manifest", str(manifest)])
     comparison = json.loads(output.read_text(encoding="utf-8"))
+    assert comparison["modes"] == ["A", "B", "D"]
+    assert comparison["scenarios"][0]["D"]["run_id"] == adaptive
+    assert {"latency_p95_ms", "peak_ram_mb", "peak_cpu_percent"} <= comparison["scenarios"][0]["A"]["speed"].keys()
+    assert comparison["overall_speed"]["D"]["latency_p95_ms"] > 0
+    assert comparison["groups"][0]["speed"]["B"]["peak_ram_mb"] > 0
     assert comparison["scenarios"][0]["A"]["run_id"] == run_id
     assert comparison["scenarios"][0]["B"]["run_id"] == other
     assert comparison["overall"]["A"]["hota"] == pytest.approx(1)
@@ -185,6 +192,25 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
     mot.write_text(mot.read_text() + "\n", encoding="utf-8")
     with pytest.raises(SystemExit):
         cli.main(["compare", run_id, other, "--output", str(output), "--manifest", str(manifest)])
+
+
+def test_comparison_needs_reference_mode_a(tmp_path, make_video, monkeypatch, capsys):
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
+    store = RunStore(tmp_path / "runs")
+    manager = RunManager(store)
+    video = make_video(frames=2)
+    ids = []
+    for mode in ("B", "D"):
+        ids.append(
+            manager.submit(RunConfig(mode=ModeConfig(name=mode), profile=ProfileConfig(name="minimal"), source=video))
+        )
+        manager.execute(ids[-1])
+    monkeypatch.setattr(cli, "RUNS_DIR", store.root)
+
+    with pytest.raises(SystemExit):
+        cli.main(["compare", *ids, "--output", str(tmp_path / "comparison.json")])
+
+    assert "needs mode A" in capsys.readouterr().err
 
 
 def test_tracking_id_switch_and_zero_score_are_evaluated(tmp_path, make_video, monkeypatch):
