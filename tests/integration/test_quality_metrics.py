@@ -463,6 +463,48 @@ def test_benchmark_resumes_completed_scenario_and_compares(tmp_path, make_video,
     assert report["excluded"][0]["run_id"] == unpaired
 
 
+class CrashingPipeline:
+    def run(self, frames):
+        raise KeyboardInterrupt  # stands for the process dying mid-run (crash, out of memory)
+
+
+def test_benchmark_fails_runs_interrupted_by_a_crash_and_reruns_them(tmp_path, make_video, monkeypatch):
+    video = make_video(frames=1)
+    coco, mot = tmp_path / "gt.json", tmp_path / "gt.txt"
+    coco.write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "width": 64, "height": 48}],
+                "categories": [{"id": 1, "name": "person"}],
+                "annotations": [
+                    {"id": 1, "image_id": 1, "category_id": 1, "bbox": [10, 10, 20, 30], "area": 600, "iscrowd": 0}
+                ],
+            }
+        )
+    )
+    mot.write_text("1,1,10,10,20,30,1,1,1\n")
+    manifest = tmp_path / "manifest.json"
+    case = {"file": video.name, "gt_coco": coco.name, "gt_mot": mot.name, "distortion": "none", "level": 0}
+    manifest.write_text(json.dumps({"test_cases": [case]}))
+    progress = tmp_path / "progress.json"
+    command = ["benchmark", "--manifest", str(manifest), "--modes", "A", "--output", str(progress)]
+    monkeypatch.setattr(cli, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: CrashingPipeline())
+    with pytest.raises(KeyboardInterrupt):
+        cli.main(command)
+    crashed = json.loads(progress.read_text())[0]["run_id"]
+    store = RunStore(tmp_path / "runs")
+    assert store.get(crashed).status == RunStatus.RUNNING
+
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
+    cli.main(command)
+
+    assert store.get(crashed).status == RunStatus.FAILED
+    assert "interrupted" in store.get(crashed).error
+    results = json.loads(progress.read_text())
+    assert [(r["run_id"] == crashed, r["status"]) for r in results] == [(False, "completed")]
+
+
 def test_benchmark_reports_missing_default_manifest(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(cli, "RUNS_DIR", tmp_path / "runs")
