@@ -44,6 +44,7 @@ python -m resilens.cli compare --benchmark runs/benchmark.json --manifest data/m
 The comparison contains metrics per scenario, by distortion and level, and overall. Detection evaluation uses a
 confidence threshold of 0.3. FlowTracker cannot add new targets later or recover lost targets, which affects tracking
 scores. Videos without annotations can be processed with `run`, but do not have quality metrics.
+For annotated realtime runs, dropped frames count as frames without detections or tracks in quality metrics.
 
 The provided MOT20-03 videos and annotations differ in width and must be aligned before evaluation. Do not start or
 restart the API during a CLI benchmark: it can mark active runs as interrupted.

@@ -35,6 +35,8 @@ def tracking_sequence(tracks_file: Path, annotations: Path, frame_count: int | N
     max_frame = max([row[0] for row in all_gt] + [row[0] for row in tracks])
     if frame_count is not None and max_frame > frame_count:
         raise ValueError("MOT annotation frames do not match video frames")
+    if frame_count is not None:
+        max_frame = frame_count
     # Follow TrackEval MOT20 preprocessing: match all GT and remove predictions matched to distractors.
     ignored = set()
     for frame in range(1, max_frame + 1):

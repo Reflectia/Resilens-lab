@@ -3,9 +3,12 @@ import json
 import pytest
 
 from resilens import cli
-from resilens.config.schema import ModeConfig, ProfileConfig, RunConfig
+from resilens.config.schema import ModeConfig, ProfileConfig, ReplayMode, RunConfig
 from resilens.core.contracts import Detection, Track
 from resilens.core.pipeline import Pipeline
+from resilens.io.replay import VideoReplay
+from resilens.metrics.aggregate import aggregate_runs
+from resilens.metrics.detection import compute_detection_metrics
 from resilens.runs.manager import RunManager
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
@@ -35,6 +38,92 @@ class CrowdedPipeline(FixedPipeline):
 class EmptyPipeline:
     def run(self, frames):
         return list(frames)
+
+
+def test_realtime_dropped_frames_count_as_misses(tmp_path, make_video, monkeypatch):
+    video = make_video(frames=4)
+    coco, mot = tmp_path / "gt.json", tmp_path / "gt.txt"
+    coco.write_text(
+        json.dumps(
+            {
+                "images": [{"id": i, "width": 64, "height": 48} for i in range(1, 5)],
+                "categories": [{"id": 1, "name": "person"}],
+                "annotations": [
+                    {"id": i, "image_id": i, "category_id": 1, "bbox": [10, 10, 20, 30], "area": 600, "iscrowd": 0}
+                    for i in range(1, 5)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    mot.write_text("".join(f"{i},1,10,10,20,30,1,1,1\n" for i in range(1, 5)), encoding="utf-8")
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
+    monkeypatch.setattr(VideoReplay, "_frames_late", lambda self, position, started_at: int(position in (1, 3)))
+    store = RunStore(tmp_path / "runs")
+    manager = RunManager(store)
+    run_id = manager.submit(
+        RunConfig(
+            mode=ModeConfig(name="A"),
+            profile=ProfileConfig(name="minimal"),
+            source=video,
+            annotations=coco,
+            tracking_annotations=mot,
+            replay_mode=ReplayMode.REALTIME,
+        )
+    )
+    manager.execute(run_id)
+    assert store.get(run_id).status == RunStatus.COMPLETED, store.get(run_id).error
+    metrics = store.load_metrics(run_id)
+    assert metrics["processed_frames"] == 2
+    assert metrics["frames_dropped"] == 2
+    assert metrics["precision"] == pytest.approx(1)
+    assert metrics["recall"] == pytest.approx(0.5)
+    assert metrics["idf1"] == pytest.approx(2 / 3)
+    assert 0 < metrics["hota"] < 1
+    aggregate = aggregate_runs(store, [run_id])
+    for name in ("map_50_95", "precision", "recall", "hota", "idf1", "id_switches"):
+        assert aggregate[name] == pytest.approx(metrics[name])
+
+
+def test_detection_rejects_unknown_and_duplicate_processed_frames(tmp_path):
+    from resilens.core.contracts import FrameContext
+
+    annotations = tmp_path / "gt.json"
+    annotations.write_text(json.dumps({"images": [{"id": 1}, {"id": 2}]}), encoding="utf-8")
+    first = FrameContext(index=0, timestamp_s=0, image=None)
+    unknown = FrameContext(index=2, timestamp_s=0, image=None)
+    for frames in ([first, unknown], [first, first]):
+        with pytest.raises(ValueError, match="frames do not match"):
+            compute_detection_metrics(frames, annotations)
+
+
+def test_invalid_coco_frame_ids_fail_before_processing(tmp_path, make_video, monkeypatch):
+    video = make_video(frames=2)
+    coco, mot = tmp_path / "gt.json", tmp_path / "gt.txt"
+    coco.write_text(
+        json.dumps({"images": [{"id": 1, "width": 64, "height": 48}, {"id": 3, "width": 64, "height": 48}]}),
+        encoding="utf-8",
+    )
+    mot.write_text("1,1,10,10,20,30,1,1,1\n", encoding="utf-8")
+
+    def unexpected_pipeline(config):
+        raise AssertionError("Pipeline must not start with invalid frame IDs")
+
+    monkeypatch.setattr(Pipeline, "from_config", unexpected_pipeline)
+    store = RunStore(tmp_path / "runs")
+    manager = RunManager(store)
+    run_id = manager.submit(
+        RunConfig(
+            mode=ModeConfig(name="A"),
+            profile=ProfileConfig(name="minimal"),
+            source=video,
+            annotations=coco,
+            tracking_annotations=mot,
+        )
+    )
+    manager.execute(run_id)
+    assert store.get(run_id).status == RunStatus.FAILED
+    assert store.get(run_id).error == "COCO annotation frames do not match video frames"
 
 
 def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_video, monkeypatch):

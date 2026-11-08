@@ -37,7 +37,13 @@ def validate_annotation_pair(coco_path: Path, mot_path: Path) -> None:
 def compute_detection_metrics(frames: list[FrameContext], annotations: Path) -> dict[str, float]:
     data = json.loads(annotations.read_text(encoding="utf-8"))
     images = data["images"]
-    if len(images) != len(frames) or [i["id"] for i in images] != [f.index + 1 for f in frames]:
+    image_ids = [image["id"] for image in images]
+    frame_ids = [frame.index + 1 for frame in frames]
+    if (
+        len(set(image_ids)) != len(image_ids)
+        or len(set(frame_ids)) != len(frame_ids)
+        or not set(frame_ids) <= set(image_ids)
+    ):
         raise ValueError("COCO annotation frames do not match video frames")
     categories = [c["id"] for c in data["categories"] if c["name"] == "person"]
     if len(categories) != 1:

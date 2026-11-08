@@ -58,6 +58,8 @@ class RunManager:
                 image["width"] != video.width or image["height"] != video.height for image in images
             ):
                 raise ValueError("COCO annotations do not match video frame count or dimensions")
+            if [image["id"] for image in images] != list(range(1, video.frame_count + 1)):
+                raise ValueError("COCO annotation frames do not match video frames")
             validate_annotation_pair(config.annotations, config.tracking_annotations)
         pipeline = Pipeline.from_config(config)
         if pipeline is None:
@@ -85,7 +87,7 @@ class RunManager:
         if config.annotations or config.tracking_annotations:
             quality_metrics = compute_detection_metrics(frames, config.annotations)
             quality_metrics.update(
-                compute_tracking_metrics(run_dir / "tracks.txt", config.tracking_annotations, len(frames))
+                compute_tracking_metrics(run_dir / "tracks.txt", config.tracking_annotations, video.frame_count)
             )
             (run_dir / "quality_detections.json").write_text(
                 json.dumps(
