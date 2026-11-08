@@ -71,6 +71,7 @@ curl http://127.0.0.1:8000/runs/<run_id>/report
 - `replay_mode=offline` (default) processes every frame; `realtime` plays the video at its own fps and drops the frames the pipeline is too slow for (`frames_dropped` in the report).
 - Mode D runs the Policy Engine: it picks enhance / skip / bypass / downscale for every frame from the degradation, the profile and the time and resource budget. See [docs/POLICY.md](docs/POLICY.md).
 - Each run writes `detections.txt`, `tracks.txt` and, in mode D, `policy_log.csv` to `runs/<run_id>/`.
+- Resource profiles (`minimal`, `standard`, `performance`) set CPU threads, the frame budget and memory limits; [docs/PROFILES.md](docs/PROFILES.md) explains the numbers and how to measure them again with `benchmarks/profiles/measure.py`.
 
 ## Tracker
 

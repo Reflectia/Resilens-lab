@@ -24,7 +24,7 @@ In modes B and D TANet runs on a quarter-size frame and the result is scaled bac
 
 ## Configuration
 
-- **Rule table:** [`configs/policy/rules.yaml`](../configs/policy/rules.yaml), version 0.1 from T-07. It also sets `skip_every_n`, the downgrade order and the budget parameters (latency window, `mean` or `p95`, `near_limit_ratio`). The values marked provisional are to be confirmed by TL/TA.
+- **Rule table:** [`configs/policy/rules.yaml`](../configs/policy/rules.yaml), version 0.1 from T-07. It also sets `skip_every_n`, the downgrade order and the budget parameters (latency window, `mean` or `p95`, `near_limit_ratio`). `skip_every_n` and the budget parameters come from the T-20 measurements ([docs/PROFILES.md](PROFILES.md)).
 - **Profiles:** [`configs/profiles/*.yaml`](../configs/profiles/). The Policy uses:
   - `frame_budget_ms`;
   - `memory_limit_mb`;
@@ -32,7 +32,7 @@ In modes B and D TANet runs on a quarter-size frame and the result is scaled bac
   - `gpu_memory_limit_mb`;
   - `downscale_resolution`.
 
-  A limit set to `null` is not checked. All limits are `null` until the baseline measurements of mode A, so the budget correction does not fire yet.
+  A limit set to `null` is not checked. `minimal` and `standard` have a frame budget (300 / 200 ms) and a memory limit since T-20; `cpu_limit_percent` and the `performance` limits stay `null`. See [docs/PROFILES.md](PROFILES.md) for where the numbers come from.
 - The first `warmup_frames` (10) frames do not count towards the moving latency.
 
 ## Running
@@ -75,4 +75,4 @@ Latency is the median per frame after warm-up.
 
 - TANet removes our synthetic fog well (fog_l2 PSNR to the clean video 8.9 → 26.9 dB) and brings detection back to the clean level, while D on clean video costs no more than A.
 - TANet does not remove our synthetic rain, and YOLOX finds nobody on rain_l2 with or without it. Whether `enhance` for rain is worth its cost, and whether the synthetic rain is too heavy, is left for the rule calibration.
-- The budget correction lowers the action by one step, as the rule table says. With a test budget of 150 ms, `enhance` became `skip`, but the moving latency stayed over the budget (TANet on every third frame). Whether to lower further is to be decided once the profiles have real limits.
+- The budget correction lowers the action by one step, as the rule table says. With a test budget of 150 ms, `enhance` became `skip`, but the moving latency stayed over the budget (TANet on every third frame). With the T-20 limits the same happens on standard (latency within budget on ~74 % of fog frames); whether to lower further is still open.
