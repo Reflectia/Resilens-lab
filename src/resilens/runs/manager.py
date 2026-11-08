@@ -7,7 +7,7 @@ one run at a time; it reads runs through `store`.
 import json
 import time
 
-from resilens.config.schema import RunConfig
+from resilens.config.schema import Device, RunConfig
 from resilens.core.pipeline import Pipeline
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
@@ -66,7 +66,7 @@ class RunManager:
         if pipeline is None:
             raise NotImplementedError("Pipeline is not implemented yet for mode A: Detector and Tracker are required")
 
-        sampler = ResourceSampler()
+        sampler = ResourceSampler(gpu=config.profile.device is Device.CUDA)
         sampler.start()
         replay = VideoReplay(video, config.replay_mode)
         started = time.perf_counter()
@@ -106,7 +106,7 @@ class RunManager:
         return {
             "processing_time_s": elapsed_s,
             "fps": processed_frames / elapsed_s,
-            "peak_ram_mb": resources["peak_ram_mb"],
+            **resources,
             "processed_frames": float(processed_frames),
             "frames_dropped": float(replay.frames_dropped),
             "detections_per_frame": sum(len(ctx.detections) for ctx in frames) / processed_frames,
