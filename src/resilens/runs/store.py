@@ -11,7 +11,7 @@ from resilens.runs.fingerprint import file_sha256
 from resilens.runs.models import RunNotFoundError, RunRecord, RunStatus
 
 
-def _write_json(path: Path, value: dict) -> None:
+def _write_json(path: Path, value: dict | list) -> None:
     """Replace a complete JSON artifact so readers never see a partial write."""
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
@@ -34,7 +34,11 @@ class RunStore:
         """Register a queued run with an immutable config and input fingerprint."""
         source = config.source.resolve(strict=True)
         snapshot = config.model_copy(update={"source": source})
-        fingerprint = file_sha256(source)
+        fingerprint = {"source_sha256": file_sha256(source)}
+        for field in ("annotations", "tracking_annotations"):
+            path = getattr(config, field)
+            if path is not None and path.is_file():
+                fingerprint[f"{field}_sha256"] = file_sha256(path)
         record = RunRecord(
             run_id=uuid4().hex,
             status=RunStatus.QUEUED,
@@ -48,7 +52,7 @@ class RunStore:
             directory = self.root / record.run_id
             directory.mkdir()
             _write_json(directory / "config.json", snapshot.model_dump(mode="json"))
-            _write_json(directory / "fingerprint.json", {"source_sha256": fingerprint})
+            _write_json(directory / "fingerprint.json", fingerprint)
             self._save_record(record)
         return record
 
@@ -109,6 +113,18 @@ class RunStore:
             raise FileNotFoundError(f"Run source video is missing: {source}")
         if file_sha256(source) != expected:
             raise ValueError(f"Run source video changed after submission: {source}")
+
+    def verify_annotations(self, run_id: str) -> None:
+        directory = self.run_dir(run_id)
+        config = self.load_config(run_id)
+        fingerprint = _read_json(directory / "fingerprint.json")
+        for field in ("annotations", "tracking_annotations"):
+            path = getattr(config, field)
+            if path is not None:
+                if not path.is_file():
+                    raise FileNotFoundError(f"Run annotation file is missing: {path}")
+                if fingerprint.get(f"{field}_sha256") != file_sha256(path):
+                    raise ValueError(f"Run annotation changed after submission: {path}")
 
     def get(self, run_id: str) -> RunRecord:
         with self._lock:

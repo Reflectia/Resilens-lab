@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import psutil
 
-from resilens.config.config import RUNS_DIR
+from resilens.config.config import DATA_DIR, RUNS_DIR
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidationError, VideoValidator
 from resilens.reports.generator import ReportGenerator
@@ -57,12 +57,55 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> None:
-    pass
+def cmd_run(args: argparse.Namespace) -> int:
+    from resilens.config.loader import build_run_config
+    from resilens.runs.manager import RunManager
+
+    manager = RunManager(RunStore(RUNS_DIR), recover_interrupted=False)
+    config = build_run_config(
+        args.mode,
+        args.profile,
+        args.video,
+        annotations=args.annotations,
+        tracking_annotations=args.tracking_annotations,
+        replay_mode=args.replay,
+    )
+    run_id = manager.submit(config)
+    manager.execute(run_id)
+    record = manager.store.get(run_id)
+    print(json.dumps({"run_id": run_id, "status": record.status, "error": record.error}))
+    return 0 if record.status == RunStatus.COMPLETED else 1
 
 
-def cmd_benchmark(args: argparse.Namespace) -> None:
-    pass
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    from resilens.metrics.benchmark import run_benchmark
+
+    if not args.manifest.is_file():
+        print(
+            f"Benchmark manifest not found: {args.manifest}. Use --manifest to specify its location.", file=sys.stderr
+        )
+        return 1
+    return run_benchmark(
+        RunStore(RUNS_DIR),
+        args.manifest,
+        args.profile,
+        args.modes,
+        args.scenario,
+        args.output,
+        lambda result: print(json.dumps(result), flush=True),
+    )
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    from resilens.metrics.comparison import compare_runs
+
+    try:
+        report = compare_runs(RunStore(RUNS_DIR), args.run_ids, args.benchmark, args.manifest)
+        args.output.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
+        return 0
+    except (OSError, KeyError, ValueError) as error:
+        print(f"Cannot compare runs: {error}", file=sys.stderr)
+        return 1
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -103,18 +146,28 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--mode", default="A", choices=["A", "B", "C", "D", "E"])
     run.add_argument("--profile", default="minimal")
     run.add_argument("--annotations", type=Path)
+    run.add_argument("--tracking-annotations", type=Path)
     run.add_argument("--replay", default="offline", choices=["offline", "realtime"])
     run.set_defaults(func=cmd_run)
 
     bench = sub.add_parser("benchmark", help="compare modes on scenarios")
-    bench.add_argument("--modes", nargs="+", default=["A", "B", "C", "D", "E"])
+    bench.add_argument("--modes", nargs="+", choices=["A", "B"], default=["A", "B"])
     bench.add_argument("--profile", default="minimal")
-    bench.add_argument("--repeats", type=int, default=3)
+    bench.add_argument("--manifest", type=Path, default=DATA_DIR / "manifest.json", help="default: data/manifest.json")
+    bench.add_argument("--scenario", action="append", help="video path from manifest; repeat to select multiple")
+    bench.add_argument("--output", type=Path, default=RUNS_DIR / "benchmark.json", help="default: runs/benchmark.json")
     bench.set_defaults(func=cmd_benchmark)
 
     report = sub.add_parser("report", help="build reports")
     report.add_argument("run_ids", nargs="+")
     report.set_defaults(func=cmd_report)
+
+    compare = sub.add_parser("compare", help="compare completed A and B runs")
+    compare.add_argument("run_ids", nargs="*")
+    compare.add_argument("--benchmark", type=Path, help="benchmark JSON containing completed run IDs")
+    compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--manifest", type=Path, help="manifest used for degradation grouping")
+    compare.set_defaults(func=cmd_compare)
 
     scen = sub.add_parser("build-scenarios", help="generate degraded control clips")
     scen.add_argument("source_dir", type=Path)

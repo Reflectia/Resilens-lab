@@ -17,6 +17,38 @@ Put model weights into `weights/` and videos and scenarios into `data/` (both fo
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
+### Quality benchmark
+
+The benchmark compares modes A and B on annotated videos. Each scenario needs matching COCO and MOT annotations.
+From the project directory, run all scenarios in `data/manifest.json`:
+
+```bash
+python -m resilens.cli benchmark
+```
+
+To select one scenario or use a different manifest, pass the paths explicitly:
+
+```bash
+python -m resilens.cli benchmark --manifest /path/to/manifest.json --scenario control_videos/MOT20-01/clean.mp4
+```
+
+Progress is saved in `runs/benchmark.json`; each run's metrics and report are in `runs/<run_id>/`. Use `--output`
+to choose another progress file. Running the same command again resumes completed scenarios after checking inputs.
+
+Create a comparison of completed A/B pairs:
+
+```bash
+python -m resilens.cli compare --benchmark runs/benchmark.json --manifest data/manifest.json --output runs/comparison.json
+```
+
+The comparison contains metrics per scenario, by distortion and level, and overall. Detection evaluation uses a
+confidence threshold of 0.3. FlowTracker cannot add new targets later or recover lost targets, which affects tracking
+scores. Videos without annotations can be processed with `run`, but do not have quality metrics.
+For annotated realtime runs, dropped frames count as frames without detections or tracks in quality metrics.
+
+The provided MOT20-03 videos and annotations differ in width and must be aligned before evaluation. Do not start or
+restart the API during a CLI benchmark: it can mark active runs as interrupted.
+
 ```bash
 uvicorn resilens.api.app:app --reload    # REST API: http://127.0.0.1:8000/docs
 streamlit run src/resilens/ui/app.py     # Web UI:   http://localhost:8501
