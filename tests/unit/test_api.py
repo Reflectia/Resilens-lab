@@ -256,6 +256,14 @@ def test_mode_a_runs_real_pipeline(video, uploads_dir, run_store, monkeypatch, t
     assert (run["status"], run["error"]) == ("completed", None)
     assert report["metrics"]["processed_frames"] == 10
     assert {"detections_per_frame", "tracks_per_frame"} <= report["metrics"].keys()
+    timing_keys = {
+        "latency_p95_ms",
+        "stage_yolox_nano_p95_ms",
+        "stage_flow_p95_ms",
+        "peak_cpu_percent",
+        "mean_cpu_percent",
+    }
+    assert timing_keys <= report["metrics"].keys()
     assert (run_store.run_dir(run_id) / "tracks.txt").is_file()
 
 

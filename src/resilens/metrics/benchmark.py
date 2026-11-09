@@ -30,6 +30,19 @@ def _verify_benchmark_resume(
     manager.store.verify_annotations(run_id)
 
 
+INTERRUPTED = "interrupted: the benchmark stopped before this run finished"
+
+
+def _fail_interrupted_runs(store: RunStore, results: list[dict]) -> None:
+    """Runs this benchmark had started when its process died (crash, out of memory) stay queued or running
+    forever; mark them failed so they do not look active. Runs of the API are not in `results`."""
+    for result in results:
+        if result["status"] in (RunStatus.QUEUED, RunStatus.RUNNING):
+            if store.get(result["run_id"]).status in (RunStatus.QUEUED, RunStatus.RUNNING):
+                store.update_status(result["run_id"], RunStatus.FAILED, error=INTERRUPTED)
+            result.update(status=RunStatus.FAILED.value, error=INTERRUPTED)
+
+
 def run_benchmark(
     store: RunStore,
     manifest_path: Path,
@@ -47,6 +60,7 @@ def run_benchmark(
             raise ValueError("Some requested scenarios were not found")
     manager = RunManager(store, recover_interrupted=False)
     results = json.loads(output_path.read_text(encoding="utf-8")) if output_path.exists() else []
+    _fail_interrupted_runs(store, results)
     for entry in scenarios:
         for mode in modes:
             existing = next(
@@ -69,16 +83,12 @@ def run_benchmark(
                 tracking_annotations=manifest_path.parent / entry["gt_mot"],
             )
             run_id = manager.submit(config)
+            result = {"scenario": entry["file"], "mode": mode, "run_id": run_id, "status": "running", "error": None}
+            results.append(result)
+            _write_json(output_path, results)  # saved before it runs, so a crash leaves a trace to clean up
             manager.execute(run_id)
             record = manager.store.get(run_id)
-            result = {
-                "scenario": entry["file"],
-                "mode": mode,
-                "run_id": run_id,
-                "status": record.status,
-                "error": record.error,
-            }
-            results.append(result)
+            result.update(status=record.status, error=record.error)
             on_result(result)
             _write_json(output_path, results)
     return 1 if any(result["status"] != RunStatus.COMPLETED for result in results) else 0

@@ -1,0 +1,8 @@
+# Minimal profile hardware (proposal, T-20): 2 CPUs, 4 GB RAM, no GPU.
+#   docker compose -f docker-compose.yml -f docker-compose.minimal.yml up --build
+services:
+  api:
+    cpus: "2"
+    mem_limit: 4g
+    volumes:
+      - ./benchmarks:/app/benchmarks

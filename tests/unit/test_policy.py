@@ -123,12 +123,13 @@ def test_missing_estimate_counts_as_unknown(rules: RuleTable) -> None:
 
 
 def test_skip_enhances_every_nth_frame(rules: RuleTable) -> None:
-    policy = engine(rules)  # rain level 1 on standard -> skip, N = 3
+    policy = engine(rules)  # rain level 1 on standard -> skip
+    n = rules.config.skip_every_n  # two full cycles: TANet on frames 0, n and 2n
 
-    decisions = [policy.decide(estimate(RAIN, 1), NO_BUDGET) for _ in range(7)]
+    decisions = [policy.decide(estimate(RAIN, 1), NO_BUDGET) for _ in range(2 * n + 1)]
 
     assert {d.action for d in decisions} == {SKIP}
-    assert [d.enhance for d in decisions] == [True, False, False, True, False, False, True]
+    assert [d.enhance for d in decisions] == [i % n == 0 for i in range(2 * n + 1)]
 
 
 def test_skip_counter_restarts_with_setup(rules: RuleTable) -> None:
