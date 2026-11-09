@@ -129,7 +129,9 @@ def test_list_runs_newest_first(client, video) -> None:
     assert listed == run_ids[::-1]
 
 
-@pytest.mark.parametrize("path", ["/runs/missing", "/runs/missing/report"])
+@pytest.mark.parametrize(
+    "path", ["/runs/missing", "/runs/missing/report", "/runs/missing/files", "/runs/missing/files/tracks.txt"]
+)
 def test_unknown_run_is_not_found(client, path: str) -> None:
     response = client.get(path)
 
@@ -289,3 +291,81 @@ def test_mode_d_run_saves_policy_log_and_summary(video, uploads_dir, run_store, 
     log = (run_store.run_dir(run_id) / "policy_log.csv").read_text(encoding="utf-8").splitlines()
     assert len(log) == 1 + 10  # header + one row per frame
     assert {"policy_enhance_share", "policy_downgraded_share", "policy_enhanced_share"} <= metrics.keys()
+
+
+TRACK_ROW = "1,1,5,5,20,20,0.9,-1,-1,-1\n"
+
+
+def completed_run(client: TestClient, run_manager: StubRunManager, video: Path, tracks: str | None = None) -> str:
+    run_id = post_run(client, video).json()["run_id"]
+    wait_for_runs(client)
+    if tracks is not None:
+        run_dir = run_manager.store.run_dir(run_id)
+        (run_dir / "tracks.txt").write_text(tracks)
+        (run_dir / "detections.txt").write_text(tracks.replace(",1,", ",-1,"))
+    return run_id
+
+
+def test_run_info_names_the_uploaded_video(client, video) -> None:
+    run_id = post_run(client, video, filename="fog_l2.mp4").json()["run_id"]
+
+    assert client.get(f"/runs/{run_id}").json()["source_name"] == "fog_l2.mp4"
+
+
+def test_run_files_are_listed_and_served(client, run_manager, video) -> None:
+    run_id = completed_run(client, run_manager, video, tracks=TRACK_ROW)
+
+    names = client.get(f"/runs/{run_id}/files").json()
+    tracks = client.get(f"/runs/{run_id}/files/tracks.txt")
+    config = client.get(f"/runs/{run_id}/files/config.json")
+
+    assert names == ["config.json", "fingerprint.json", "metrics.json", "detections.txt", "tracks.txt"]
+    assert tracks.status_code == 200 and tracks.text.startswith("1,1,5")
+    assert config.json()["mode"]["name"] == "A"
+
+
+@pytest.mark.parametrize("name", ["record.json", "policy_log.csv", "..%2Frecord.json", "annotated.webm"])
+def test_unlisted_or_missing_file_is_not_found(client, run_manager, video, name: str) -> None:
+    run_id = completed_run(client, run_manager, video)
+
+    assert client.get(f"/runs/{run_id}/files/{name}").status_code == 404
+
+
+def test_annotated_video_is_rendered_once(client, run_manager, video, monkeypatch) -> None:
+    run_id = completed_run(client, run_manager, video, tracks=TRACK_ROW)
+
+    first = client.get(f"/runs/{run_id}/video")
+    monkeypatch.setattr("resilens.api.routes.render_annotated_video", lambda *args: pytest.fail("rendered twice"))
+    second = client.get(f"/runs/{run_id}/video")
+
+    assert first.status_code == 200 and first.headers["content-type"] == "video/webm"
+    assert first.content[:4] == bytes.fromhex("1a45dfa3")  # EBML header of a WebM file
+    assert second.content == first.content
+
+
+def test_video_needs_a_completed_run_with_tracks_and_source(client, run_manager, video) -> None:
+    run_manager.release = Event()
+    running_id = post_run(client, video).json()["run_id"]
+    assert run_manager.started.wait(timeout=5)
+    assert client.get(f"/runs/{running_id}/video").status_code == 409
+    run_manager.release.set()
+    wait_for_runs(client)
+    run_manager.release = None
+
+    no_tracks = client.get(f"/runs/{running_id}/video")
+    gone_id = completed_run(client, run_manager, video, tracks=TRACK_ROW)
+    run_manager.store.get(gone_id).source.unlink()
+    no_source = client.get(f"/runs/{gone_id}/video")
+
+    assert no_tracks.status_code == 404 and "no tracks" in no_tracks.json()["detail"]
+    assert no_source.status_code == 404 and "no longer available" in no_source.json()["detail"]
+
+
+def test_modes_and_profiles_come_from_configs(client) -> None:
+    modes = client.get("/modes").json()
+    profiles = client.get("/profiles").json()
+
+    assert [mode["name"] for mode in modes] == ["A", "B", "C", "D", "E"]
+    assert modes[3]["use_policy"] is True and modes[0]["detector"] == "yolox_nano"
+    assert {profile["name"] for profile in profiles} == {"minimal", "standard", "performance"}
+    assert "frame_budget_ms" in profiles[0]

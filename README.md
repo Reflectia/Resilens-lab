@@ -85,6 +85,23 @@ curl http://127.0.0.1:8000/runs/<run_id>/report
 - `replay_mode=offline` (default) processes every frame; `realtime` plays the video at its own fps and drops the frames the pipeline is too slow for (`frames_dropped` in the report).
 - Mode D runs the Policy Engine: it picks enhance / skip / bypass / downscale for every frame from the degradation, the profile and the time and resource budget. See [docs/POLICY.md](docs/POLICY.md).
 - Each run writes `detections.txt`, `tracks.txt` and, in mode D, `policy_log.csv` to `runs/<run_id>/`.
+- Results for the Web UI: `GET /runs/{id}/files` lists the run's artifacts and `GET /runs/{id}/files/{name}` serves one;
+  `GET /runs/{id}/video` returns the source video with tracks and detections drawn on it (WebM, rendered on the first
+  request and kept as `runs/<run_id>/annotated.webm`); `GET /modes` and `GET /profiles` list the presets.
+
+## Web UI
+
+`streamlit run src/resilens/ui/app.py` (the API must be running; set `RESILENS_API_URL` if it is not on
+`http://127.0.0.1:8000`). The UI works only through the REST API:
+
+- **New run**: upload an MP4/AVI video, pick a mode (with its stages) and a resource profile (with its limits), choose
+  offline or realtime replay, start the run and follow its status.
+- **Runs**: every run with status, video, duration and error; for a completed run its metrics (performance, pipeline
+  output, detection and tracking quality when the run had annotations, Policy Engine shares), the annotated video,
+  detections and tracks per frame, the track list, the policy decisions per frame (mode D), the config snapshot and
+  downloads of all run files.
+- **Comparison**: metrics of several runs side by side with the change against a reference run (mode A by default), a
+  bar chart per metric and, for annotated runs, quality vs FPS.
 - Resource profiles (`minimal`, `standard`, `performance`) set CPU threads, the frame budget and memory limits; [docs/PROFILES.md](docs/PROFILES.md) explains the numbers and how to measure them again with `benchmarks/profiles/measure.py`.
 
 ## Tracker
