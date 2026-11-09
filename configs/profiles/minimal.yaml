@@ -1,9 +1,9 @@
 name: minimal
 device: cpu
-cpu_threads: null
+cpu_threads: 2  # hardware: 2 CPUs, 4 GB RAM, as in docker-compose.minimal.yml (T-20)
 max_resolution: null  # (width, height); larger videos are rejected
 downscale_resolution: [960, 540]  # (width, height) for the policy's downscale action
-frame_budget_ms: null
-memory_limit_mb: null
-cpu_limit_percent: null  # 100 = one fully used core
+frame_budget_ms: 300  # fits skip on two threads: ~160 ms + TANet ~980 ms / 11 (docs/PROFILES.md)
+memory_limit_mb: 4096  # the Docker memory limit
+cpu_limit_percent: null  # not checked: a run always uses all its cpu_threads, so CPU is always near the limit
 gpu_memory_limit_mb: null

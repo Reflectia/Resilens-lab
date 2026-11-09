@@ -10,9 +10,7 @@ services:
       - ./data:/app/data
       - ./weights:/app/weights
       - ./runs:/app/runs
-    # Resource profiles are emulated with limits, e.g.:
-    # cpus: "2"
-    # mem_limit: 4g
+    # Resource profiles are emulated with CPU and memory limits in docker-compose.<profile>.yml (docs/PROFILES.md)
 
   ui:
     build:

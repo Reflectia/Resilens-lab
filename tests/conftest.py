@@ -12,6 +12,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FOURCC_BY_EXTENSION = {".avi": "MJPG", ".mp4": "mp4v"}
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--run-real-weights", action="store_true", help="run local tests using trained model weights")
+    parser.addoption("--test-video", default=None, help="control video for trained-weight integration tests")
+    parser.addoption("--weights-dir", default="weights", help="directory containing YOLOX and TANet weights")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if not config.getoption("--run-real-weights"):
+        skip = pytest.mark.skip(reason="requires --run-real-weights")
+        for item in items:
+            if "real_weights" in item.keywords:
+                item.add_marker(skip)
+
+
 @pytest.fixture
 def configs_dir() -> Path:
     return REPO_ROOT / "configs"

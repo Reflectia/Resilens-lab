@@ -17,9 +17,23 @@ Put model weights into `weights/` and videos and scenarios into `data/` (both fo
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
+### Local integration tests with trained weights
+
+These opt-in tests run A and D on a real video with each configured profile; the performance profile requires CUDA.
+They process the entire video and can take a long time on CPU. Missing assets or CUDA are reported as skips, not passes.
+Run from the repository root (use paths appropriate to your machine):
+
+```bash
+python -m pytest -v -rs tests/integration/test_real_weights.py --run-real-weights --test-video /path/to/short-video.mp4 --weights-dir /path/to/weights
+```
+
+The weights directory must contain `yolox_nano_coco.pth` and `tanet.pth`. The tests use temporary run stores.
+They force analyzer estimates for controlled policy paths and use a test rule for `enhance`; a separate test uses the
+real analyzer and normal rules. The default test suite skips these tests, including in CI.
+
 ### Quality benchmark
 
-The benchmark compares modes A and B on annotated videos. Each scenario needs matching COCO and MOT annotations.
+The benchmark runs modes on annotated videos (`--modes`, default `A B`) and compares each of them with mode A, the reference. Each scenario needs matching COCO and MOT annotations.
 From the project directory, run all scenarios in `data/manifest.json`:
 
 ```bash
@@ -35,13 +49,13 @@ python -m resilens.cli benchmark --manifest /path/to/manifest.json --scenario co
 Progress is saved in `runs/benchmark.json`; each run's metrics and report are in `runs/<run_id>/`. Use `--output`
 to choose another progress file. Running the same command again resumes completed scenarios after checking inputs.
 
-Create a comparison of completed A/B pairs:
+Create a comparison of the completed runs (every video needs a run in each compared mode, mode A included):
 
 ```bash
 python -m resilens.cli compare --benchmark runs/benchmark.json --manifest data/manifest.json --output runs/comparison.json
 ```
 
-The comparison contains metrics per scenario, by distortion and level, and overall. Detection evaluation uses a
+The comparison contains quality metrics and speed and resources (latency p50/p95, peak RAM/CPU/GPU) per scenario, by distortion and level, and overall. Detection evaluation uses a
 confidence threshold of 0.3. FlowTracker cannot add new targets later or recover lost targets, which affects tracking
 scores. Videos without annotations can be processed with `run`, but do not have quality metrics.
 For annotated realtime runs, dropped frames count as frames without detections or tracks in quality metrics.
@@ -88,6 +102,7 @@ curl http://127.0.0.1:8000/runs/<run_id>/report
   downloads of all run files.
 - **Comparison**: metrics of several runs side by side with the change against a reference run (mode A by default), a
   bar chart per metric and, for annotated runs, quality vs FPS.
+- Resource profiles (`minimal`, `standard`, `performance`) set CPU threads, the frame budget and memory limits; [docs/PROFILES.md](docs/PROFILES.md) explains the numbers and how to measure them again with `benchmarks/profiles/measure.py`.
 
 ## Tracker
 

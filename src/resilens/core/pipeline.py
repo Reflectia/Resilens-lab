@@ -1,7 +1,10 @@
 import inspect
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 
+import cv2
 import numpy as np
+import torch
 
 # Importing the stage modules registers their classes under the names used in configs/modes/*.yaml
 import resilens.detection.yolox  # noqa: F401
@@ -28,10 +31,30 @@ def create_stage(name: str, params: dict, device: str) -> Stage:
     return stage_class(**params)
 
 
+@contextmanager
+def cpu_threads_limited(threads: int | None) -> Iterator[None]:
+    """Run with at most `threads` PyTorch and OpenCV threads, then restore the previous settings.
+
+    Restoring matters because the API runs runs of different profiles one after another in the same process.
+    """
+    if threads is None:
+        yield
+        return
+    previous_torch, previous_cv2 = torch.get_num_threads(), cv2.getNumThreads()
+    torch.set_num_threads(threads)
+    cv2.setNumThreads(threads)
+    try:
+        yield
+    finally:
+        torch.set_num_threads(previous_torch)
+        cv2.setNumThreads(previous_cv2)
+
+
 class Pipeline:
-    def __init__(self, stages: list[Stage], telemetry: Telemetry) -> None:
+    def __init__(self, stages: list[Stage], telemetry: Telemetry, cpu_threads: int | None = None) -> None:
         self.stages = stages
         self.telemetry = telemetry
+        self.cpu_threads = cpu_threads  # the profile's limit; None = library defaults (all cores)
 
     @classmethod
     def from_config(cls, config: RunConfig) -> "Pipeline":
@@ -57,7 +80,7 @@ class Pipeline:
             create_stage(mode.detector, mode.detector_params, profile.device.value),
             create_stage(mode.tracker, mode.tracker_params, profile.device.value),
         ]
-        return cls(stages, telemetry)
+        return cls(stages, telemetry, profile.cpu_threads)
 
     def process_frame(self, ctx: FrameContext) -> FrameContext:
         """Run all stages on one frame, recording per-stage timing and the frame's latency in telemetry."""
@@ -74,14 +97,15 @@ class Pipeline:
         memory does not grow with the video length.
         """
         processed: list[FrameContext] = []
-        try:
-            for stage in self.stages:
-                stage.setup()
-            for ctx in frames:
-                ctx = self.process_frame(ctx)
-                ctx.image, ctx.enhanced = NO_PIXELS, None
-                processed.append(ctx)
-        finally:
-            for stage in self.stages:
-                stage.teardown()
+        with cpu_threads_limited(self.cpu_threads):
+            try:
+                for stage in self.stages:
+                    stage.setup()
+                for ctx in frames:
+                    ctx = self.process_frame(ctx)
+                    ctx.image, ctx.enhanced = NO_PIXELS, None
+                    processed.append(ctx)
+            finally:
+                for stage in self.stages:
+                    stage.teardown()
         return processed

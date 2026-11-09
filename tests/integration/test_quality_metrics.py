@@ -163,6 +163,8 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
     assert metrics["id_switches"] == 0
     other = manager.submit(config.model_copy(update={"mode": ModeConfig(name="B")}))
     manager.execute(other)
+    adaptive = manager.submit(config.model_copy(update={"mode": ModeConfig(name="D")}))
+    manager.execute(adaptive)
     monkeypatch.setattr(cli, "RUNS_DIR", store.root)
     output = tmp_path / "comparison.json"
     manifest = tmp_path / "manifest.json"
@@ -175,8 +177,13 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
             }
         )
     )
-    cli.main(["compare", run_id, other, "--output", str(output), "--manifest", str(manifest)])
+    cli.main(["compare", run_id, other, adaptive, "--output", str(output), "--manifest", str(manifest)])
     comparison = json.loads(output.read_text(encoding="utf-8"))
+    assert comparison["modes"] == ["A", "B", "D"]
+    assert comparison["scenarios"][0]["D"]["run_id"] == adaptive
+    assert {"latency_p95_ms", "peak_ram_mb", "peak_cpu_percent"} <= comparison["scenarios"][0]["A"]["speed"].keys()
+    assert comparison["overall_speed"]["D"]["latency_p95_ms"] > 0
+    assert comparison["groups"][0]["speed"]["B"]["peak_ram_mb"] > 0
     assert comparison["scenarios"][0]["A"]["run_id"] == run_id
     assert comparison["scenarios"][0]["B"]["run_id"] == other
     assert comparison["overall"]["A"]["hota"] == pytest.approx(1)
@@ -185,6 +192,25 @@ def test_annotated_run_reports_perfect_detection_and_tracking(tmp_path, make_vid
     mot.write_text(mot.read_text() + "\n", encoding="utf-8")
     with pytest.raises(SystemExit):
         cli.main(["compare", run_id, other, "--output", str(output), "--manifest", str(manifest)])
+
+
+def test_comparison_needs_reference_mode_a(tmp_path, make_video, monkeypatch, capsys):
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
+    store = RunStore(tmp_path / "runs")
+    manager = RunManager(store)
+    video = make_video(frames=2)
+    ids = []
+    for mode in ("B", "D"):
+        ids.append(
+            manager.submit(RunConfig(mode=ModeConfig(name=mode), profile=ProfileConfig(name="minimal"), source=video))
+        )
+        manager.execute(ids[-1])
+    monkeypatch.setattr(cli, "RUNS_DIR", store.root)
+
+    with pytest.raises(SystemExit):
+        cli.main(["compare", *ids, "--output", str(tmp_path / "comparison.json")])
+
+    assert "needs mode A" in capsys.readouterr().err
 
 
 def test_tracking_id_switch_and_zero_score_are_evaluated(tmp_path, make_video, monkeypatch):
@@ -435,6 +461,48 @@ def test_benchmark_resumes_completed_scenario_and_compares(tmp_path, make_video,
     report = json.loads(comparison.read_text())
     assert len(report["scenarios"]) == 1
     assert report["excluded"][0]["run_id"] == unpaired
+
+
+class CrashingPipeline:
+    def run(self, frames):
+        raise KeyboardInterrupt  # stands for the process dying mid-run (crash, out of memory)
+
+
+def test_benchmark_fails_runs_interrupted_by_a_crash_and_reruns_them(tmp_path, make_video, monkeypatch):
+    video = make_video(frames=1)
+    coco, mot = tmp_path / "gt.json", tmp_path / "gt.txt"
+    coco.write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "width": 64, "height": 48}],
+                "categories": [{"id": 1, "name": "person"}],
+                "annotations": [
+                    {"id": 1, "image_id": 1, "category_id": 1, "bbox": [10, 10, 20, 30], "area": 600, "iscrowd": 0}
+                ],
+            }
+        )
+    )
+    mot.write_text("1,1,10,10,20,30,1,1,1\n")
+    manifest = tmp_path / "manifest.json"
+    case = {"file": video.name, "gt_coco": coco.name, "gt_mot": mot.name, "distortion": "none", "level": 0}
+    manifest.write_text(json.dumps({"test_cases": [case]}))
+    progress = tmp_path / "progress.json"
+    command = ["benchmark", "--manifest", str(manifest), "--modes", "A", "--output", str(progress)]
+    monkeypatch.setattr(cli, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: CrashingPipeline())
+    with pytest.raises(KeyboardInterrupt):
+        cli.main(command)
+    crashed = json.loads(progress.read_text())[0]["run_id"]
+    store = RunStore(tmp_path / "runs")
+    assert store.get(crashed).status == RunStatus.RUNNING
+
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FixedPipeline())
+    cli.main(command)
+
+    assert store.get(crashed).status == RunStatus.FAILED
+    assert "interrupted" in store.get(crashed).error
+    results = json.loads(progress.read_text())
+    assert [(r["run_id"] == crashed, r["status"]) for r in results] == [(False, "completed")]
 
 
 def test_benchmark_reports_missing_default_manifest(tmp_path, monkeypatch, capsys):

@@ -10,6 +10,7 @@ import psutil
 import torch
 
 from resilens.core.contracts import BudgetState, FrameContext, StageTiming
+from resilens.metrics.latency import LatencySummary, frame_latency_ms, summarize_latencies
 
 
 @contextmanager
@@ -22,33 +23,62 @@ def _stage_timer(ctx: FrameContext, stage: str) -> Iterator[None]:
 
 
 class ResourceSampler:
-    """Observe peak process RAM while a run is executing."""
+    """Observe peak process RAM and CPU and, on a GPU profile, peak GPU memory while a run is executing.
 
-    def __init__(self, interval_s: float = 0.01) -> None:
+    CPU is the process's CPU time per wall-clock time over windows of `cpu_interval_s`, as psutil counts it:
+    100 = one fully used core. Shorter windows are noisy (the OS counts CPU time in coarse ticks).
+    """
+
+    def __init__(self, interval_s: float = 0.01, cpu_interval_s: float = 0.5, gpu: bool = False) -> None:
         self.interval_s = interval_s
+        self.cpu_interval_s = cpu_interval_s
+        self.gpu = gpu and torch.cuda.is_available()
         self._process = psutil.Process()
         self._stopping = Event()
         self._thread: Thread | None = None
         self._peak_ram_mb = 0.0
+        self._peak_cpu_percent = 0.0
+        self._started = self._window_start = (0.0, 0.0)  # (wall s, process CPU s)
 
     def start(self) -> None:
-        self._peak_ram_mb = 0.0
+        self._peak_ram_mb = self._peak_cpu_percent = 0.0
+        self._started = self._window_start = self._clocks()
+        if self.gpu:
+            torch.cuda.reset_peak_memory_stats()
         self._stopping.clear()
         self._sample()
         self._thread = Thread(target=self._poll, name="resource-sampler", daemon=True)
         self._thread.start()
 
     def stop(self) -> dict[str, float]:
-        """Return peak values collected since start()."""
+        """Return peak values collected since start() and the mean CPU of the whole run."""
         self._stopping.set()
         if self._thread is not None:
             self._thread.join()
             self._thread = None
         self._sample()
-        return {"peak_ram_mb": self._peak_ram_mb}
+        wall_s, cpu_s = (now - then for now, then in zip(self._clocks(), self._started, strict=True))
+        result = {
+            "peak_ram_mb": self._peak_ram_mb,
+            # a run shorter than one window has no full window: its mean is the best estimate of the peak
+            "peak_cpu_percent": self._peak_cpu_percent or 100 * cpu_s / max(wall_s, 1e-9),
+            "mean_cpu_percent": 100 * cpu_s / max(wall_s, 1e-9),
+        }
+        if self.gpu:
+            result["peak_gpu_memory_mb"] = torch.cuda.max_memory_reserved() / 2**20
+        return result
+
+    def _clocks(self) -> tuple[float, float]:
+        cpu = self._process.cpu_times()
+        return time.perf_counter(), cpu.user + cpu.system
 
     def _sample(self) -> None:
         self._peak_ram_mb = max(self._peak_ram_mb, self._process.memory_info().rss / 2**20)
+        now = self._clocks()
+        wall_s, cpu_s = (a - b for a, b in zip(now, self._window_start, strict=True))
+        if wall_s >= self.cpu_interval_s:
+            self._peak_cpu_percent = max(self._peak_cpu_percent, 100 * cpu_s / wall_s)
+            self._window_start = now
 
     def _poll(self) -> None:
         while not self._stopping.wait(self.interval_s):
@@ -83,7 +113,7 @@ class Telemetry:
 
     def record_frame(self, ctx: FrameContext) -> None:
         """Store end-to-end latency (sum of ctx.timings, frame reading included) of a finished frame."""
-        latency_ms = sum(timing.duration_ms for timing in ctx.timings)
+        latency_ms = frame_latency_ms(ctx)
         self.latencies_ms.append(latency_ms)
         if len(self.latencies_ms) > self.warmup_frames:
             self._recent_ms.append(latency_ms)
@@ -105,6 +135,6 @@ class Telemetry:
             gpu_memory_mb=gpu_memory_mb,
         )
 
-    def summary(self) -> dict:
-        """Latency summary plus peak resource usage."""
-        pass
+    def summary(self, frame_budget_ms: float | None = None) -> LatencySummary:
+        """FPS, p50 / p95 and the share of frames within the budget, after warm-up."""
+        return summarize_latencies(self.latencies_ms, frame_budget_ms, self.warmup_frames)

@@ -1,7 +1,10 @@
+import time
+
 import pytest
+import torch
 
 from resilens.core.contracts import StageTiming
-from resilens.metrics.telemetry import Telemetry
+from resilens.metrics.telemetry import ResourceSampler, Telemetry
 from resilens.testing.mocks import mock_frames
 
 
@@ -55,3 +58,39 @@ def test_budget_state_measures_this_process() -> None:
     assert budget.ram_mb > 0
     assert budget.cpu_percent >= 0
     assert budget.gpu_memory_mb is None  # not a GPU profile
+
+
+def busy(seconds: float) -> None:
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        pass
+
+
+def test_sampler_measures_ram_and_cpu_of_a_busy_run() -> None:
+    sampler = ResourceSampler(cpu_interval_s=0.1)
+    sampler.start()
+    busy(0.6)
+    resources = sampler.stop()
+
+    assert resources["peak_ram_mb"] > 0
+    assert resources["peak_cpu_percent"] >= 50  # one busy thread is ~100 %
+    assert 30 <= resources["mean_cpu_percent"] <= resources["peak_cpu_percent"] + 1
+    assert "peak_gpu_memory_mb" not in resources
+
+
+def test_sampler_cpu_of_an_idle_run_is_low() -> None:
+    sampler = ResourceSampler(cpu_interval_s=0.1)
+    sampler.start()
+    time.sleep(0.5)
+
+    assert sampler.stop()["mean_cpu_percent"] < 50
+
+
+def test_sampler_reports_peak_gpu_memory_on_gpu_profile(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "reset_peak_memory_stats", lambda: None)
+    monkeypatch.setattr(torch.cuda, "max_memory_reserved", lambda: 512 * 2**20)
+    sampler = ResourceSampler(gpu=True)
+    sampler.start()
+
+    assert sampler.stop()["peak_gpu_memory_mb"] == 512

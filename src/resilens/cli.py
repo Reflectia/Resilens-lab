@@ -151,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.set_defaults(func=cmd_run)
 
     bench = sub.add_parser("benchmark", help="compare modes on scenarios")
-    bench.add_argument("--modes", nargs="+", choices=["A", "B"], default=["A", "B"])
+    bench.add_argument("--modes", nargs="+", choices=["A", "B", "C", "D", "E"], default=["A", "B"])
     bench.add_argument("--profile", default="minimal")
     bench.add_argument("--manifest", type=Path, default=DATA_DIR / "manifest.json", help="default: data/manifest.json")
     bench.add_argument("--scenario", action="append", help="video path from manifest; repeat to select multiple")
@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("run_ids", nargs="+")
     report.set_defaults(func=cmd_report)
 
-    compare = sub.add_parser("compare", help="compare completed A and B runs")
+    compare = sub.add_parser("compare", help="compare completed runs of each mode with mode A")
     compare.add_argument("run_ids", nargs="*")
     compare.add_argument("--benchmark", type=Path, help="benchmark JSON containing completed run IDs")
     compare.add_argument("--output", type=Path, required=True)
