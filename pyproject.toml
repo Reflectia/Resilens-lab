@@ -55,7 +55,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration"]
+markers = ["integration", "real_weights: local tests requiring trained weights and a control video"]
 
 [tool.ruff]
 line-length = 120

@@ -17,6 +17,20 @@ Put model weights into `weights/` and videos and scenarios into `data/` (both fo
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
+### Local integration tests with trained weights
+
+These opt-in tests run A and D on a real video with each configured profile; the performance profile requires CUDA.
+They process the entire video and can take a long time on CPU. Missing assets or CUDA are reported as skips, not passes.
+Run from the repository root (use paths appropriate to your machine):
+
+```bash
+python -m pytest -v -rs tests/integration/test_real_weights.py --run-real-weights --test-video /path/to/short-video.mp4 --weights-dir /path/to/weights
+```
+
+The weights directory must contain `yolox_nano_coco.pth` and `tanet.pth`. The tests use temporary run stores.
+They force analyzer estimates for controlled policy paths and use a test rule for `enhance`; a separate test uses the
+real analyzer and normal rules. The default test suite skips these tests, including in CI.
+
 ### Quality benchmark
 
 The benchmark compares modes A and B on annotated videos. Each scenario needs matching COCO and MOT annotations.
