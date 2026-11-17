@@ -37,13 +37,31 @@ class ApiClient:
     def list_profiles(self) -> list[dict]:
         return self._request("GET", "/profiles").json()
 
-    def create_run(self, mode: str, profile: str, video_name: str, video: bytes, replay_mode: str = "offline") -> dict:
-        """Upload a video and queue a run; returns {"run_id", "status"}."""
+    def create_run(
+        self,
+        mode: str,
+        profile: str,
+        video_name: str,
+        video: bytes,
+        replay_mode: str = "offline",
+        gt_coco: tuple[str, bytes] | None = None,
+        gt_mot: tuple[str, bytes] | None = None,
+    ) -> dict:
+        """Upload a video and queue a run; returns {"run_id", "status"}.
+
+        gt_coco and gt_mot are (file name, content) of the video's COCO and MOT ground truth: with both of them the
+        run also gets detection and tracking quality metrics.
+        """
+        files = {"video": (video_name, video, "application/octet-stream")}
+        if gt_coco is not None:
+            files["gt_coco"] = (*gt_coco, "application/json")
+        if gt_mot is not None:
+            files["gt_mot"] = (*gt_mot, "text/plain")
         return self._request(
             "POST",
             "/runs",
             data={"mode": mode, "profile": profile, "replay_mode": replay_mode},
-            files={"video": (video_name, video, "application/octet-stream")},
+            files=files,
             timeout=300,  # large uploads are validated before the API answers
         ).json()
 

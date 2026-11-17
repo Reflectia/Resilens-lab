@@ -1,5 +1,6 @@
 """Web UI against the real REST API (stub Run Manager): the API client and a smoke run of the Streamlit page."""
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -131,3 +132,87 @@ def test_page_shows_api_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not page.exception
     assert len(page.error) == 3 and "Cannot reach the Resilens API" in page.error[0].value
     st.cache_resource.clear()
+
+
+def ground_truth(frames: int) -> tuple[bytes, bytes]:
+    """COCO and MOT ground truth for a make_video clip (64x48): one person box per frame."""
+    coco = {
+        "images": [{"id": i, "width": 64, "height": 48} for i in range(1, frames + 1)],
+        "categories": [{"id": 1, "name": "person"}],
+        "annotations": [
+            {"id": i, "image_id": i, "category_id": 1, "bbox": [10, 10, 20, 30], "area": 600, "iscrowd": 0}
+            for i in range(1, frames + 1)
+        ],
+    }
+    return json.dumps(coco).encode(), "".join(f"{i},1,10,10,20,30,1,1,1\n" for i in range(1, frames + 1)).encode()
+
+
+def uploader(page: AppTest, label: str):
+    return next(widget for widget in page.get("file_uploader") if widget.label == label)
+
+
+def test_client_sends_annotations(client, api, make_video) -> None:
+    coco, mot = ground_truth(frames=3)
+
+    run_id = client.create_run(
+        "A",
+        "minimal",
+        "clip.mp4",
+        make_video("clip.mp4", frames=3).read_bytes(),
+        gt_coco=("gt.json", coco),
+        gt_mot=("gt.txt", mot),
+    )["run_id"]
+
+    config = api.app.state.manager.store.load_config(run_id)
+    assert (config.annotations.read_bytes(), config.tracking_annotations.read_bytes()) == (coco, mot)
+
+
+def test_client_reports_invalid_annotations(client, make_video) -> None:
+    coco, mot = ground_truth(frames=2)
+
+    with pytest.raises(ApiError, match="Invalid annotations: COCO annotations do not match") as error:
+        client.create_run(
+            "A",
+            "minimal",
+            "clip.mp4",
+            make_video("clip.mp4", frames=3).read_bytes(),
+            gt_coco=("gt.json", coco),
+            gt_mot=("gt.txt", mot),
+        )
+    assert error.value.status_code == 422
+
+
+def test_page_starts_an_annotated_run(ui: AppTest, api, make_video) -> None:
+    coco, mot = ground_truth(frames=3)
+    ui.run()
+    assert {widget.label for widget in ui.get("file_uploader")} == {"Video", "COCO annotations", "MOT annotations"}
+
+    uploader(ui, "Video").upload("clip.mp4", make_video("clip.mp4", frames=3).read_bytes(), "video/mp4").run()
+    uploader(ui, "COCO annotations").upload("gt.json", coco, "application/json").run()
+    start = next(button for button in ui.button if button.label == "Start run")
+    assert start.disabled  # only one annotation file
+    assert any("Add the MOT annotations too" in warning.value for warning in ui.warning)
+
+    uploader(ui, "MOT annotations").upload("gt.txt", mot, "text/plain").run()
+    start = next(button for button in ui.button if button.label == "Start run")
+    assert not start.disabled
+    start.click().run()
+
+    assert not ui.exception, ui.exception
+    assert any("is queued" in success.value for success in ui.success)
+    [run] = api.app.state.manager.store.list_runs()
+    config = api.app.state.manager.store.load_config(run.run_id)
+    assert (config.annotations.read_bytes(), config.tracking_annotations.read_bytes()) == (coco, mot)
+
+
+def test_page_shows_annotation_errors(ui: AppTest, api, make_video) -> None:
+    coco, mot = ground_truth(frames=2)
+    ui.run()
+    uploader(ui, "Video").upload("clip.mp4", make_video("clip.mp4", frames=3).read_bytes(), "video/mp4").run()
+    uploader(ui, "COCO annotations").upload("gt.json", coco, "application/json").run()
+    uploader(ui, "MOT annotations").upload("gt.txt", mot, "text/plain").run()
+
+    next(button for button in ui.button if button.label == "Start run").click().run()
+
+    assert any("The run was not started: Invalid annotations" in error.value for error in ui.error)
+    assert api.app.state.manager.store.list_runs() == []

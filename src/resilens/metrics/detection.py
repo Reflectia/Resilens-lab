@@ -24,12 +24,15 @@ def validate_annotation_pair(coco_path: Path, mot_path: Path) -> None:
         if a["category_id"] == categories[0] and not a.get("iscrowd", 0)
     )
     mot_boxes = Counter()
-    for line in mot_path.read_text(encoding="utf-8").splitlines():
+    for number, line in enumerate(mot_path.read_text(encoding="utf-8").splitlines(), start=1):
         parts = line.split(",")
         if len(parts) < 9:
-            raise ValueError("Invalid MOT annotation")
-        if float(parts[6]) != 0 and int(float(parts[7])) == 1:
-            mot_boxes[(int(parts[0]), *(float(v) for v in parts[2:6]))] += 1
+            raise ValueError(f"Invalid MOT annotation on line {number}: expected 9 comma-separated values")
+        try:
+            if float(parts[6]) != 0 and int(float(parts[7])) == 1:
+                mot_boxes[(int(parts[0]), *(float(v) for v in parts[2:6]))] += 1
+        except ValueError as error:
+            raise ValueError(f"Invalid MOT annotation on line {number}: {error}") from error
     if not coco_boxes or coco_boxes != mot_boxes:
         raise ValueError("COCO and MOT person annotations do not match")
 

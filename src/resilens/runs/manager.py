@@ -8,6 +8,7 @@ import json
 import time
 
 from resilens.config.schema import Device, RunConfig
+from resilens.core.contracts import VideoInfo
 from resilens.core.pipeline import Pipeline
 from resilens.io.replay import VideoReplay
 from resilens.io.validation import VideoValidator
@@ -19,6 +20,36 @@ from resilens.policy.log import export_policy_log, policy_summary
 from resilens.reports.generator import ReportGenerator
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
+
+
+def validate_annotations(config: RunConfig, video: VideoInfo) -> None:
+    """Check the COCO and MOT ground truth of an annotated run against its video, before any frame is processed."""
+    if not config.annotations and not config.tracking_annotations:
+        return
+    if not config.annotations or not config.tracking_annotations:
+        raise ValueError("Both COCO and MOT annotations are required")
+    for annotation in (config.annotations, config.tracking_annotations):
+        if not annotation.is_file():
+            raise FileNotFoundError(f"Annotation file not found: {annotation}")
+    if float(config.mode.detector_params.get("conf_threshold", 0.3)) > 0.3:
+        raise ValueError("Detector confidence threshold cannot exceed evaluation threshold 0.3")
+    try:
+        images = json.loads(config.annotations.read_text(encoding="utf-8"))["images"]
+        if len(images) != video.frame_count or any(
+            image["width"] != video.width or image["height"] != video.height for image in images
+        ):
+            raise ValueError("COCO annotations do not match video frame count or dimensions")
+        if [image["id"] for image in images] != list(range(1, video.frame_count + 1)):
+            raise ValueError("COCO annotation frames do not match video frames")
+        validate_annotation_pair(config.annotations, config.tracking_annotations)
+    except UnicodeDecodeError as error:
+        raise ValueError("Annotation files must be UTF-8 text") from error
+    except json.JSONDecodeError as error:
+        raise ValueError(f"COCO annotations are not valid JSON: {error}") from error
+    except KeyError as error:
+        raise ValueError(f"COCO annotations have no {error} field") from error
+    except TypeError as error:
+        raise ValueError(f"COCO annotations have an unexpected structure: {error}") from error
 
 
 class RunManager:
@@ -46,22 +77,7 @@ class RunManager:
         self.store.verify_source(run_id)
         self.store.verify_annotations(run_id)
         video = VideoValidator(max_resolution=config.profile.max_resolution).validate(config.source)
-        if config.annotations or config.tracking_annotations:
-            if not config.annotations or not config.tracking_annotations:
-                raise ValueError("Both COCO and MOT annotations are required")
-            for annotation in (config.annotations, config.tracking_annotations):
-                if not annotation.is_file():
-                    raise FileNotFoundError(f"Annotation file not found: {annotation}")
-            if float(config.mode.detector_params.get("conf_threshold", 0.3)) > 0.3:
-                raise ValueError("Detector confidence threshold cannot exceed evaluation threshold 0.3")
-            images = json.loads(config.annotations.read_text(encoding="utf-8"))["images"]
-            if len(images) != video.frame_count or any(
-                image["width"] != video.width or image["height"] != video.height for image in images
-            ):
-                raise ValueError("COCO annotations do not match video frame count or dimensions")
-            if [image["id"] for image in images] != list(range(1, video.frame_count + 1)):
-                raise ValueError("COCO annotation frames do not match video frames")
-            validate_annotation_pair(config.annotations, config.tracking_annotations)
+        validate_annotations(config, video)
         pipeline = Pipeline.from_config(config)
         if pipeline is None:
             raise NotImplementedError("Pipeline is not implemented yet for mode A: Detector and Tracker are required")
