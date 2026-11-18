@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.8",
 ]
+e2e = ["pytest-playwright>=0.10"]
 
 [project.scripts]
 resilens = "resilens.cli:main"
@@ -61,7 +62,7 @@ markers = ["integration", "real_weights: local tests requiring trained weights a
 [tool.ruff]
 line-length = 120
 target-version = "py313"
-src = ["src", "tests"]
+src = ["src", "tests", "e2e"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

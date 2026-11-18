@@ -204,6 +204,7 @@ def render_runs(client: ApiClient) -> None:
 
 def render_run_detail(client: ApiClient, run: dict) -> None:
     st.subheader(data.run_label(run))
+    st.caption(f"Run ID: {run['run_id']}")
     if run["status"] in ACTIVE_STATUSES:
         render_progress(client, run["run_id"])
         st.button("Refresh", key="refresh_detail")
