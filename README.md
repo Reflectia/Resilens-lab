@@ -31,6 +31,20 @@ The weights directory must contain `yolox_nano_coco.pth` and `tanet.pth`. The te
 They force analyzer estimates for controlled policy paths and use a test rule for `enhance`; a separate test uses the
 real analyzer and normal rules. The default test suite skips these tests, including in CI.
 
+### Browser E2E tests
+
+Run from the repository root with a short clip and matching COCO JSON and MOT TXT files.
+
+```bash
+python -m pip install -e ".[dev,e2e]"
+python -m playwright install chromium
+python -m pytest -v e2e --e2e-video "../data/control_videos/MOT20-01/clean.mp4" --e2e-coco "../data/ground_truth/MOT20-01_coco.json" --e2e-mot "../data/ground_truth/MOT20-01_gt.txt"
+```
+
+Seven local tests cover mode A results and errors, plus COCO/MOT upload and validation. They start the API and Streamlit
+automatically and run on CPU. Weights default to `weights/yolox_nano_coco.pth` (`--e2e-weights PATH` overrides it).
+CI excludes this suite.
+
 ### Quality benchmark
 
 The benchmark runs modes on annotated videos (`--modes`, default `A B`) and compares each of them with mode A, the reference. Each scenario needs matching COCO and MOT annotations.
