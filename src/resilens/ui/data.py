@@ -30,6 +30,7 @@ METRIC_GROUPS: dict[str, list[Metric]] = {
         Metric("fps", "FPS", ".2f", "higher"),
         Metric("processing_time_s", "Processing time, s", ".1f", "lower"),
         Metric("peak_ram_mb", "Peak RAM, MB", ".0f", "lower"),
+        Metric("peak_gpu_memory_mb", "Peak GPU memory, MB", ".0f", "lower"),  # GPU profiles only
         Metric("processed_frames", "Processed frames", ".0f"),
         Metric("frames_dropped", "Dropped frames", ".0f", "lower"),
     ],

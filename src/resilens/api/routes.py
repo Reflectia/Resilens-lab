@@ -6,8 +6,9 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 
-from resilens.api.schemas import RunCreated, RunInfo, RunReport, ScenarioInfo
+from resilens.api.schemas import ProfileInfo, RunCreated, RunInfo, RunReport, ScenarioInfo
 from resilens.api.worker import RunQueue
+from resilens.config.devices import check_profile_device
 from resilens.config.loader import (
     available_modes,
     available_profiles,
@@ -15,7 +16,7 @@ from resilens.config.loader import (
     load_mode,
     load_profile,
 )
-from resilens.config.schema import ModeConfig, ProfileConfig, ReplayMode
+from resilens.config.schema import ModeConfig, ReplayMode
 from resilens.core.contracts import VideoInfo
 from resilens.io.validation import SUPPORTED_EXTENSIONS, VideoValidationError, VideoValidator
 from resilens.reports.annotated_video import ANNOTATED_VIDEO, render_annotated_video
@@ -122,6 +123,10 @@ def create_run(
         raise HTTPException(422, f"Unknown mode '{mode}'. Available: {', '.join(available_modes())}")
     if profile not in available_profiles():
         raise HTTPException(422, f"Unknown profile '{profile}'. Available: {', '.join(available_profiles())}")
+    try:
+        check_profile_device(load_profile(profile))
+    except RuntimeError as error:
+        raise HTTPException(422, str(error)) from error
     if is_sent(video) == bool(scenario_id):
         raise HTTPException(422, "Provide exactly one of 'video' or 'scenario_id'")
     if scenario_id:
@@ -222,10 +227,10 @@ def list_modes() -> list[ModeConfig]:
     return [load_mode(name) for name in available_modes()]
 
 
-@router.get("/profiles", response_model=list[ProfileConfig])
-def list_profiles() -> list[ProfileConfig]:
-    """Resource profiles from configs/profiles/ with their limits."""
-    return [load_profile(name) for name in available_profiles()]
+@router.get("/profiles", response_model=list[ProfileInfo])
+def list_profiles() -> list[ProfileInfo]:
+    """Resource profiles from configs/profiles/ with their limits and whether this host has their device."""
+    return [ProfileInfo.from_profile(load_profile(name)) for name in available_profiles()]
 
 
 @router.get("/scenarios", response_model=list[ScenarioInfo])

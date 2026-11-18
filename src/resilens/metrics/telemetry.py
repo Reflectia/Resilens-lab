@@ -14,11 +14,13 @@ from resilens.metrics.latency import LatencySummary, frame_latency_ms, summarize
 
 
 @contextmanager
-def _stage_timer(ctx: FrameContext, stage: str) -> Iterator[None]:
+def _stage_timer(ctx: FrameContext, stage: str, synchronize_gpu: bool = False) -> Iterator[None]:
     started = time.perf_counter()
     try:
         yield
     finally:
+        if synchronize_gpu:
+            torch.cuda.synchronize()
         ctx.timings.append(StageTiming(stage, (time.perf_counter() - started) * 1000))
 
 
@@ -108,8 +110,11 @@ class Telemetry:
         self._process.cpu_percent(None)  # the first call only starts the measurement
 
     def stage_timer(self, ctx: FrameContext, stage: str) -> AbstractContextManager[None]:
-        """Append the time spent inside the `with` block to ctx.timings, also when the stage raises."""
-        return _stage_timer(ctx, stage)
+        """Append the time spent inside the `with` block to ctx.timings, also when the stage raises.
+
+        On a GPU profile the timer waits for the stage's CUDA work to finish before it stops.
+        """
+        return _stage_timer(ctx, stage, synchronize_gpu=self.gpu and torch.cuda.is_available())
 
     def record_frame(self, ctx: FrameContext) -> None:
         """Store end-to-end latency (sum of ctx.timings, frame reading included) of a finished frame."""

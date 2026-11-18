@@ -3,7 +3,7 @@ import time
 import pytest
 import torch
 
-from resilens.core.contracts import StageTiming
+from resilens.core.contracts import FrameContext, StageTiming
 from resilens.metrics.telemetry import ResourceSampler, Telemetry
 from resilens.testing.mocks import mock_frames
 
@@ -94,3 +94,29 @@ def test_sampler_reports_peak_gpu_memory_on_gpu_profile(monkeypatch) -> None:
     sampler.start()
 
     assert sampler.stop()["peak_gpu_memory_mb"] == 512
+
+
+@pytest.mark.parametrize(("gpu", "synchronized"), [(True, 1), (False, 0)])
+def test_stage_timer_waits_for_cuda_work_on_gpu_profile(monkeypatch, gpu: bool, synchronized: int) -> None:
+    calls = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: calls.append(time.perf_counter()))
+    telemetry = Telemetry(gpu=gpu)
+    ctx = FrameContext(index=0, timestamp_s=0, image=None)
+
+    with telemetry.stage_timer(ctx, "yolox_nano"):
+        pass
+
+    assert len(calls) == synchronized
+    assert [timing.stage for timing in ctx.timings] == ["yolox_nano"]
+
+
+def test_stage_timer_does_not_synchronize_without_cuda(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: pytest.fail("no CUDA to synchronize"))
+    ctx = FrameContext(index=0, timestamp_s=0, image=None)
+
+    with Telemetry(gpu=True).stage_timer(ctx, "tanet"):
+        pass
+
+    assert len(ctx.timings) == 1

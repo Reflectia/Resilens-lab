@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from resilens.config.devices import device_name, device_unavailable_reason
+from resilens.config.schema import ProfileConfig
 from resilens.runs.models import RunRecord, RunStatus
 
 
@@ -31,6 +33,24 @@ class RunInfo(BaseModel):
             created_at=record.created_at,
             finished_at=record.finished_at,
             error=record.error,
+        )
+
+
+class ProfileInfo(ProfileConfig):
+    """A resource profile and whether the API host has its device (a GPU profile needs CUDA)."""
+
+    available: bool
+    device_name: str | None = None  # the GPU a CUDA profile runs on
+    unavailable_reason: str | None = None
+
+    @classmethod
+    def from_profile(cls, profile: ProfileConfig) -> "ProfileInfo":
+        reason = device_unavailable_reason(profile.device)
+        return cls(
+            **profile.model_dump(),
+            available=reason is None,
+            device_name=device_name(profile.device),
+            unavailable_reason=reason,
         )
 
 

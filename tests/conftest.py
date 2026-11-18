@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+import torch
 
 from resilens.runs.store import RunStore
 from resilens.testing.runs import StubRunManager
@@ -56,3 +57,22 @@ def run_store(tmp_path: Path) -> RunStore:
 @pytest.fixture
 def run_manager(run_store: RunStore) -> StubRunManager:
     return StubRunManager(run_store)
+
+
+GPU_NAME = "NVIDIA Test GPU"
+
+
+@pytest.fixture
+def no_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A CPU-only PyTorch build, as in CI and on laptops without a GPU."""
+    monkeypatch.setattr(torch.version, "cuda", None)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+
+@pytest.fixture
+def fake_cuda(monkeypatch: pytest.MonkeyPatch) -> str:
+    """A CUDA build of PyTorch that sees one GPU; returns the GPU name. Nothing actually runs on it."""
+    monkeypatch.setattr(torch.version, "cuda", "12.8")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda device=None: GPU_NAME)
+    return GPU_NAME
