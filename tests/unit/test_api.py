@@ -1,5 +1,6 @@
 """REST API /runs against stub Run Manager and Run Store."""
 
+import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -369,3 +370,107 @@ def test_modes_and_profiles_come_from_configs(client) -> None:
     assert modes[3]["use_policy"] is True and modes[0]["detector"] == "yolox_nano"
     assert {profile["name"] for profile in profiles} == {"minimal", "standard", "performance"}
     assert "frame_budget_ms" in profiles[0]
+
+
+def ground_truth(frames: int = 10, width: int = 64, height: int = 48) -> tuple[bytes, bytes]:
+    """COCO and MOT ground truth for a make_video clip: one person box per frame."""
+    coco = {
+        "images": [{"id": i, "width": width, "height": height} for i in range(1, frames + 1)],
+        "categories": [{"id": 1, "name": "person"}],
+        "annotations": [
+            {"id": i, "image_id": i, "category_id": 1, "bbox": [10, 10, 20, 30], "area": 600, "iscrowd": 0}
+            for i in range(1, frames + 1)
+        ],
+    }
+    mot = "".join(f"{i},1,10,10,20,30,1,1,1\n" for i in range(1, frames + 1))
+    return json.dumps(coco).encode(), mot.encode()
+
+
+def post_annotated_run(client: TestClient, video: Path, coco: bytes | None, mot: bytes | None, **names):
+    files = {"video": (video.name, video.read_bytes(), "video/mp4")}
+    if coco is not None:
+        files["gt_coco"] = (names.get("coco_name", "MOT20-01_coco.json"), coco, "application/json")
+    if mot is not None:
+        files["gt_mot"] = (names.get("mot_name", "MOT20-01_gt.txt"), mot, "text/plain")
+    return client.post("/runs", data={"mode": "A", "profile": "minimal"}, files=files)
+
+
+def assert_nothing_stored(run_manager: StubRunManager, uploads_dir: Path) -> None:
+    assert run_manager.store.list_runs() == []
+    assert not uploads_dir.exists() or not any(uploads_dir.iterdir())
+
+
+def test_create_run_with_annotations(client, run_manager, video, uploads_dir) -> None:
+    coco, mot = ground_truth()
+
+    response = post_annotated_run(client, video, coco, mot, mot_name="../gt.txt")
+
+    assert response.status_code == 202, response.json()
+    run_id = response.json()["run_id"]
+    config = run_manager.store.load_config(run_id)
+    assert config.annotations.read_bytes() == coco
+    assert config.tracking_annotations.read_bytes() == mot
+    assert config.annotations.parent == config.tracking_annotations.parent == config.source.parent
+    assert config.tracking_annotations.name == "gt.txt"
+    assert config.source.parent.parent == uploads_dir.resolve()
+    fingerprint = json.loads(client.get(f"/runs/{run_id}/files/fingerprint.json").content)
+    assert {"annotations_sha256", "tracking_annotations_sha256"} <= fingerprint.keys()
+
+
+def test_run_without_annotations_has_none(client, run_manager, video) -> None:
+    config = run_manager.store.load_config(post_run(client, video).json()["run_id"])
+
+    assert (config.annotations, config.tracking_annotations) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("coco", "mot", "names", "message"),
+    [
+        (ground_truth()[0], None, {}, "Provide both 'gt_coco' (COCO .json) and 'gt_mot' (MOT .txt)"),
+        (None, ground_truth()[1], {}, "Provide both"),
+        (*ground_truth(), {"coco_name": "gt.txt"}, "'gt_coco' must be a .json file, got 'gt.txt'"),
+        (*ground_truth(), {"mot_name": "gt.csv"}, "'gt_mot' must be a .txt file"),
+        (*ground_truth(frames=9), {}, "COCO annotations do not match video frame count or dimensions"),
+        (*ground_truth(width=1920), {}, "COCO annotations do not match video frame count or dimensions"),
+        (b"{not json", ground_truth()[1], {}, "COCO annotations are not valid JSON"),
+        (b"{}", ground_truth()[1], {}, "COCO annotations have no 'images' field"),
+        (ground_truth()[0], b"1,1,10,10,20,30,1,1\n", {}, "Invalid MOT annotation on line 1"),
+        (ground_truth()[0], b"1,1,x,10,20,30,1,1,1\n", {}, "Invalid MOT annotation on line 1"),
+        (ground_truth()[0], ground_truth(frames=9)[1], {}, "COCO and MOT person annotations do not match"),
+    ],
+    ids=[
+        "coco_only",
+        "mot_only",
+        "coco_not_json",
+        "mot_not_txt",
+        "frame_count",
+        "dimensions",
+        "broken_json",
+        "no_images",
+        "short_mot_line",
+        "mot_not_numbers",
+        "coco_mot_differ",
+    ],
+)
+def test_bad_annotations_are_rejected_and_not_kept(
+    client, run_manager, video, uploads_dir, coco, mot, names: dict, message: str
+) -> None:
+    response = post_annotated_run(client, video, coco, mot, **names)
+
+    assert response.status_code == 422
+    assert message in response.json()["detail"]
+    assert_nothing_stored(run_manager, uploads_dir)
+
+
+def test_annotated_run_gets_quality_metrics(video, uploads_dir, run_store, monkeypatch) -> None:
+    """POST /runs with annotations -> real Run Manager -> detection and tracking metrics in the report."""
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: FakePipeline())
+    with TestClient(create_app(RunManager(run_store), uploads_dir)) as client:
+        run_id = post_annotated_run(client, video, *ground_truth()).json()["run_id"]
+        wait_for_runs(client)
+        run = client.get(f"/runs/{run_id}").json()
+        metrics = client.get(f"/runs/{run_id}/report").json()["metrics"]
+
+    assert (run["status"], run["error"]) == ("completed", None)
+    assert {"map_50_95", "precision", "recall", "hota", "idf1", "id_switches"} <= metrics.keys()
+    assert metrics["recall"] == 0  # FakePipeline detects nothing

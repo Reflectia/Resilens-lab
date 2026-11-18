@@ -84,6 +84,7 @@ def render_run_form(client: ApiClient) -> None:
     profiles = {profile["name"]: profile for profile in listed}
 
     video = st.file_uploader("Video", type=["mp4", "avi"], help="MP4 or AVI. The API checks that it can be decoded.")
+    gt_coco, gt_mot = render_annotation_inputs()
     mode_column, profile_column = st.columns(2)
     with mode_column:
         mode = st.selectbox(
@@ -99,10 +100,22 @@ def render_run_form(client: ApiClient) -> None:
         "Replay", list(REPLAY_HELP), horizontal=True, captions=list(REPLAY_HELP.values()), key="replay_mode"
     )
 
-    if st.button("Start run", type="primary", disabled=video is None):
-        with st.spinner("Uploading and checking the video…"):
+    annotated = gt_coco is not None and gt_mot is not None
+    if annotated and replay == "realtime":
+        st.caption("Realtime replay with annotations: dropped frames count as frames without detections or tracks.")
+    one_annotation = (gt_coco is None) != (gt_mot is None)
+    if st.button("Start run", type="primary", disabled=video is None or one_annotation):
+        with st.spinner(f"Uploading and checking the video{' and annotations' if annotated else ''}…"):
             try:
-                created = client.create_run(mode, profile, video.name, video.getvalue(), replay)
+                created = client.create_run(
+                    mode,
+                    profile,
+                    video.name,
+                    video.getvalue(),
+                    replay,
+                    gt_coco=(gt_coco.name, gt_coco.getvalue()) if annotated else None,
+                    gt_mot=(gt_mot.name, gt_mot.getvalue()) if annotated else None,
+                )
             except ApiError as error:
                 st.error(f"The run was not started: {error}")
                 return
@@ -111,6 +124,32 @@ def render_run_form(client: ApiClient) -> None:
 
     if run_id := st.session_state.get("selected_run"):
         render_progress(client, run_id)
+
+
+def render_annotation_inputs():
+    """Optional COCO and MOT ground truth of the video; with both of them the run gets quality metrics."""
+    st.markdown("**Ground-truth annotations** (optional)")
+    st.caption(
+        "Add both files to evaluate the run: COCO gives detection quality (mAP, precision, recall), "
+        "MOT gives tracking quality (HOTA, IDF1, ID switches). They must describe this exact video."
+    )
+    coco_column, mot_column = st.columns(2)
+    gt_coco = coco_column.file_uploader(
+        "COCO annotations",
+        type=["json"],
+        help="COCO JSON with one image per video frame (ids 1…N, the video's width and height) and one "
+        "'person' category.",
+    )
+    gt_mot = mot_column.file_uploader(
+        "MOT annotations",
+        type=["txt"],
+        help="MOTChallenge gt.txt: frame,id,x,y,w,h,conf,class,visibility per line, with the same person boxes as "
+        "the COCO file.",
+    )
+    if (gt_coco is None) != (gt_mot is None):
+        missing = "MOT" if gt_mot is None else "COCO"
+        st.warning(f"Add the {missing} annotations too, or remove the other file: evaluation needs both.")
+    return gt_coco, gt_mot
 
 
 @st.fragment(run_every=2)
@@ -209,7 +248,7 @@ def render_metrics(metrics: dict[str, float]) -> None:
     if not data.QUALITY_KEYS & metrics.keys():
         st.caption(
             "No detection or tracking quality metrics: this run had no ground-truth annotations. "
-            "Annotated runs are started with `resilens benchmark` (CLI) and show up here too."
+            "Add COCO and MOT annotations to a new run in the **New run** tab, or use `resilens benchmark` (CLI)."
         )
 
 

@@ -16,9 +16,10 @@ from resilens.config.loader import (
     load_profile,
 )
 from resilens.config.schema import ModeConfig, ProfileConfig, ReplayMode
+from resilens.core.contracts import VideoInfo
 from resilens.io.validation import SUPPORTED_EXTENSIONS, VideoValidationError, VideoValidator
 from resilens.reports.annotated_video import ANNOTATED_VIDEO, render_annotated_video
-from resilens.runs.manager import RunManager
+from resilens.runs.manager import RunManager, validate_annotations
 from resilens.runs.models import RunNotFoundError, RunRecord, RunStatus
 
 router = APIRouter()
@@ -48,24 +49,48 @@ def get_uploads_dir(request: Request) -> Path:
     return request.app.state.uploads_dir
 
 
-def save_upload(video: UploadFile, uploads_dir: Path) -> Path:
+def upload_name(upload: UploadFile) -> str:
+    return Path(upload.filename or "").name  # drop any directory part sent by the client
+
+
+def is_sent(upload: UploadFile | None) -> bool:
+    return upload is not None and bool(upload.filename)
+
+
+def check_annotation_uploads(gt_coco: UploadFile | None, gt_mot: UploadFile | None) -> bool:
+    """Reject a single annotation file or a wrong extension before anything is stored; True if both were sent."""
+    if is_sent(gt_coco) != is_sent(gt_mot):
+        raise HTTPException(422, "Provide both 'gt_coco' (COCO .json) and 'gt_mot' (MOT .txt) annotations, or neither")
+    if not is_sent(gt_coco):
+        return False
+    for upload, field, suffix in ((gt_coco, "gt_coco", ".json"), (gt_mot, "gt_mot", ".txt")):
+        if Path(upload_name(upload)).suffix.lower() != suffix:
+            raise HTTPException(422, f"'{field}' must be a {suffix} file, got '{upload_name(upload)}'")
+    return True
+
+
+def store_file(upload: UploadFile, folder: Path) -> Path:
+    path = folder / upload_name(upload)
+    with path.open("wb") as file:
+        shutil.copyfileobj(upload.file, file)
+    return path
+
+
+def save_upload(video: UploadFile, uploads_dir: Path) -> VideoInfo:
     """Store the upload in its own folder under uploads_dir and check it is a readable video."""
-    name = Path(video.filename or "").name  # drop any directory part sent by the client
+    name = upload_name(video)
     if Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
         supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
         raise HTTPException(422, f"Unsupported video format '{Path(name).suffix}'. Supported: {supported}")
 
     folder = uploads_dir / uuid4().hex
     folder.mkdir(parents=True)
-    path = folder / name
-    with path.open("wb") as file:
-        shutil.copyfileobj(video.file, file)
+    path = store_file(video, folder)
     try:
-        VideoValidator().validate(path)
+        return VideoValidator().validate(path)
     except VideoValidationError as error:
         shutil.rmtree(folder, ignore_errors=True)
         raise HTTPException(422, f"Invalid video: {error}") from error
-    return path
 
 
 def get_record(manager: RunManager, run_id: str) -> RunRecord:
@@ -83,26 +108,43 @@ def create_run(
     video: UploadFile | None = File(None),
     scenario_id: str | None = Form(None),
     replay_mode: ReplayMode = Form(ReplayMode.OFFLINE),
+    gt_coco: UploadFile | None = File(None, description="COCO ground truth (.json), sent together with gt_mot"),
+    gt_mot: UploadFile | None = File(None, description="MOTChallenge ground truth (gt.txt), sent with gt_coco"),
     manager: RunManager = Depends(get_manager),
     queue: RunQueue = Depends(get_queue),
     uploads_dir: Path = Depends(get_uploads_dir),
 ) -> RunCreated:
-    """Start a run on an uploaded video or a prepared scenario; poll GET /runs/{run_id} for progress."""
+    """Start a run on an uploaded video or a prepared scenario; poll GET /runs/{run_id} for progress.
+
+    With COCO and MOT ground truth for the video the run also gets detection and tracking quality metrics.
+    """
     if mode not in available_modes():
         raise HTTPException(422, f"Unknown mode '{mode}'. Available: {', '.join(available_modes())}")
     if profile not in available_profiles():
         raise HTTPException(422, f"Unknown profile '{profile}'. Available: {', '.join(available_profiles())}")
-    has_video = video is not None and bool(video.filename)
-    if has_video == bool(scenario_id):
+    if is_sent(video) == bool(scenario_id):
         raise HTTPException(422, "Provide exactly one of 'video' or 'scenario_id'")
     if scenario_id:
         raise HTTPException(501, "Runs on prepared scenarios need the scenario manifest loader (T-08)")
+    annotated = check_annotation_uploads(gt_coco, gt_mot)
 
-    source = save_upload(video, uploads_dir)
+    video_info = save_upload(video, uploads_dir)
+    folder = video_info.path.parent
     try:
-        run_id = manager.submit(build_run_config(mode, profile, source, replay_mode=replay_mode))
+        annotations = {}
+        if annotated:
+            annotations = {
+                "annotations": store_file(gt_coco, folder),
+                "tracking_annotations": store_file(gt_mot, folder),
+            }
+        config = build_run_config(mode, profile, video_info.path, replay_mode=replay_mode, **annotations)
+        try:
+            validate_annotations(config, video_info)
+        except (ValueError, FileNotFoundError) as error:
+            raise HTTPException(422, f"Invalid annotations: {error}") from error
+        run_id = manager.submit(config)
     except Exception:
-        shutil.rmtree(source.parent, ignore_errors=True)
+        shutil.rmtree(folder, ignore_errors=True)
         raise
     queue.submit(run_id)
     response.headers["Location"] = f"/runs/{run_id}"

@@ -57,7 +57,9 @@ python -m resilens.cli compare --benchmark runs/benchmark.json --manifest data/m
 
 The comparison contains quality metrics and speed and resources (latency p50/p95, peak RAM/CPU/GPU) per scenario, by distortion and level, and overall. Detection evaluation uses a
 confidence threshold of 0.3. FlowTracker cannot add new targets later or recover lost targets, which affects tracking
-scores. Videos without annotations can be processed with `run`, but do not have quality metrics.
+scores. Videos without annotations can be processed with `run`, but do not have quality metrics. A single annotated video
+can also be evaluated with `run --annotations <coco.json> --tracking-annotations <gt.txt>`, through the REST API or in
+the Web UI (see below).
 For annotated realtime runs, dropped frames count as frames without detections or tracks in quality metrics.
 
 The provided MOT20-03 videos and annotations differ in width and must be aligned before evaluation. Do not start or
@@ -82,6 +84,12 @@ curl -F mode=D -F profile=standard -F replay_mode=realtime -F "video=@path/to/fo
 curl http://127.0.0.1:8000/runs/<run_id>/report
 ```
 
+To evaluate the run, also send the video's ground truth: `-F "gt_coco=@MOT20-01_coco.json" -F "gt_mot=@MOT20-01_gt.txt"`.
+Both files are required together. The COCO file must have one image per video frame (ids 1…N, the video's width and
+height) and one `person` category; the MOT file is a MOTChallenge `gt.txt` with the same person boxes. Files that do not
+match the video are rejected with 422 before the run is queued. The report then also has detection (mAP, precision,
+recall) and tracking (HOTA, IDF1, ID switches) metrics.
+
 - `replay_mode=offline` (default) processes every frame; `realtime` plays the video at its own fps and drops the frames the pipeline is too slow for (`frames_dropped` in the report).
 - Mode D runs the Policy Engine: it picks enhance / skip / bypass / downscale for every frame from the degradation, the profile and the time and resource budget. See [docs/POLICY.md](docs/POLICY.md).
 - Each run writes `detections.txt`, `tracks.txt` and, in mode D, `policy_log.csv` to `runs/<run_id>/`.
@@ -94,8 +102,9 @@ curl http://127.0.0.1:8000/runs/<run_id>/report
 `streamlit run src/resilens/ui/app.py` (the API must be running; set `RESILENS_API_URL` if it is not on
 `http://127.0.0.1:8000`). The UI works only through the REST API:
 
-- **New run**: upload an MP4/AVI video, pick a mode (with its stages) and a resource profile (with its limits), choose
-  offline or realtime replay, start the run and follow its status.
+- **New run**: upload an MP4/AVI video, optionally its COCO (`.json`) and MOT (`.txt`) ground-truth annotations to get
+  quality metrics, pick a mode (with its stages) and a resource profile (with its limits), choose offline or realtime
+  replay, start the run and follow its status.
 - **Runs**: every run with status, video, duration and error; for a completed run its metrics (performance, pipeline
   output, detection and tracking quality when the run had annotations, Policy Engine shares), the annotated video,
   detections and tracks per frame, the track list, the policy decisions per frame (mode D), the config snapshot and
