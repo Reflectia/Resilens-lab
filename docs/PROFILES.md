@@ -118,18 +118,19 @@ shows *Peak GPU memory, MB* under Performance, and in mode D the policy log tool
 
 ### Results (to be filled in by the check)
 
-Machine: _GPU, CUDA version, PyTorch version, CPU, RAM, date, git commit (from `profiles.json`)_
+Machine: NVIDIA GeForce GTX 1650 (4 GiB), CUDA 12.8, PyTorch 2.9.1+cu128, AMD Ryzen 5 5500U (6 cores, 12 threads), 16 GiB RAM, Windows 11, commit `5c0f8b9`.
 
-| Clip | Profile | Mode | p50 / p95 | Peak RAM | Peak CPU | Peak GPU memory | TANet | YOLOX | Tracker |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| clean | standard | A | | | | — | — | | |
-| clean | standard | B | | | | — | | | |
-| clean | performance | A | | | | | — | | |
-| clean | performance | B | | | | | | | |
-| fog_l2 | standard | A | | | | — | — | | |
-| fog_l2 | standard | B | | | | — | | | |
-| fog_l2 | performance | A | | | | | — | | |
-| fog_l2 | performance | B | | | | | | | |
+
+| Clip   | Profile     | Mode | p50 / p95      | Peak RAM | Peak CPU | Peak GPU memory | TANet   | YOLOX | Tracker |
+| ------ | ----------- | ---- | -------------- | -------- | -------- | --------------- | ------- | ----- | ------- |
+| clean  | standard    | A    | 240 / 267 ms   | 767 MB   | 543 %    | —               | —       | 48 ms | 187 ms  |
+| clean  | standard    | B    | 944 / 985 ms   | 1027 MB  | 463 %    | —               | 797 ms  | 39 ms | 105 ms  |
+| clean  | performance | A    | 177 / 180 ms   | 1294 MB  | 929 %    | 30 MB           | —       | 35 ms | 138 ms  |
+| clean  | performance | B    | 234 / 246 ms   | 1456 MB  | 749 %    | 182 MB          | 102 ms  | 22 ms | 106 ms  |
+| fog_l2 | standard    | A    | 121 / 126 ms   | 1469 MB  | 526 %    | —               | —       | 40 ms | 77 ms   |
+| fog_l2 | standard    | B    | 1346 / 1414 ms | 1505 MB  | 447 %    | —               | 1230 ms | 49 ms | 62 ms   |
+| fog_l2 | performance | A    | 118 / 121 ms   | 1395 MB  | 918 %    | 182 MB          | —       | 35 ms | 79 ms   |
+| fog_l2 | performance | B    | 189 / 197 ms   | 1464 MB  | 778 %    | 182 MB          | 102 ms  | 23 ms | 60 ms   |
 
 Mode D with the chosen limits: _actions, share of frames TANet ran on, frames within budget (as in "Mode D with
 these limits" above)._
