@@ -216,3 +216,38 @@ def test_page_shows_annotation_errors(ui: AppTest, api, make_video) -> None:
 
     assert any("The run was not started: Invalid annotations" in error.value for error in ui.error)
     assert api.app.state.manager.store.list_runs() == []
+
+
+def select_profile(page: AppTest, name: str) -> None:
+    next(box for box in page.selectbox if box.label == "Resource profile").set_value(name).run()
+
+
+def start_button(page: AppTest):
+    return next(button for button in page.button if button.label == "Start run")
+
+
+def test_page_marks_gpu_profile_unavailable_without_cuda(ui: AppTest, make_video, no_cuda) -> None:
+    ui.run()
+    uploader(ui, "Video").upload("clip.mp4", make_video("clip.mp4", frames=3).read_bytes(), "video/mp4").run()
+    profiles = next(box for box in ui.selectbox if box.label == "Resource profile")
+    assert profiles.options == ["minimal · CPU", "standard · CPU", "performance · GPU (unavailable)"]
+    assert not start_button(ui).disabled
+
+    select_profile(ui, "performance")
+
+    assert not ui.exception, ui.exception
+    assert any("cannot run this profile: this PyTorch build has no CUDA" in w.value for w in ui.warning)
+    assert ui.dataframe[0].value.set_index("Setting").at["Device", "Value"].endswith("not available on the API host")
+    assert start_button(ui).disabled
+
+
+def test_page_shows_the_gpu_of_a_gpu_profile(ui: AppTest, make_video, fake_cuda) -> None:
+    ui.run()
+    uploader(ui, "Video").upload("clip.mp4", make_video("clip.mp4", frames=3).read_bytes(), "video/mp4").run()
+
+    select_profile(ui, "performance")
+
+    assert not ui.exception, ui.exception
+    assert ui.dataframe[0].value.set_index("Setting").at["Device", "Value"] == f"GPU: {fake_cuda}"
+    assert not any("cannot run this profile" in w.value for w in ui.warning)
+    assert not start_button(ui).disabled

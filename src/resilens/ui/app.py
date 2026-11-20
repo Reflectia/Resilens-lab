@@ -54,9 +54,24 @@ def stage_chain(mode: dict) -> str:
     return " → ".join(stages)
 
 
+def device_label(profile: dict) -> str:
+    """CPU, or the GPU a CUDA profile runs on on the API host."""
+    if profile["device"] != "cuda":
+        return "CPU"
+    if not profile.get("available", True):
+        return "GPU (CUDA), not available on the API host"
+    return f"GPU: {profile['device_name']}" if profile.get("device_name") else "GPU (CUDA)"
+
+
+def profile_label(profile: dict) -> str:
+    """Name in the profile list: the device, and a mark when the API host cannot run it."""
+    label = f"{profile['name']} · {'GPU' if profile['device'] == 'cuda' else 'CPU'}"
+    return label if profile.get("available", True) else f"{label} (unavailable)"
+
+
 def profile_limits(profile: dict) -> pd.DataFrame:
     rows = {
-        "Device": profile["device"],
+        "Device": device_label(profile),
         "Max resolution": profile["max_resolution"],
         "Downscale to": profile["downscale_resolution"],
         "Frame budget, ms": profile["frame_budget_ms"],
@@ -94,8 +109,19 @@ def render_run_form(client: ApiClient) -> None:
         with st.expander("Stage parameters"):
             st.json({key: modes[mode][key] for key in ("enhancer_params", "detector_params", "tracker_params")})
     with profile_column:
-        profile = st.selectbox("Resource profile", list(profiles), index=list(profiles).index("minimal"))
+        profile = st.selectbox(
+            "Resource profile",
+            list(profiles),
+            index=list(profiles).index("minimal"),
+            format_func=lambda name: profile_label(profiles[name]),
+        )
         st.dataframe(profile_limits(profiles[profile]), hide_index=True, width="stretch")
+        runnable = profiles[profile].get("available", True)
+        if not runnable:
+            st.warning(
+                f"The API host cannot run this profile: {profiles[profile]['unavailable_reason']}. "
+                "Choose another profile, or start the API on a machine with an NVIDIA GPU."
+            )
     replay = st.radio(
         "Replay", list(REPLAY_HELP), horizontal=True, captions=list(REPLAY_HELP.values()), key="replay_mode"
     )
@@ -104,7 +130,7 @@ def render_run_form(client: ApiClient) -> None:
     if annotated and replay == "realtime":
         st.caption("Realtime replay with annotations: dropped frames count as frames without detections or tracks.")
     one_annotation = (gt_coco is None) != (gt_mot is None)
-    if st.button("Start run", type="primary", disabled=video is None or one_annotation):
+    if st.button("Start run", type="primary", disabled=video is None or one_annotation or not runnable):
         with st.spinner(f"Uploading and checking the video{' and annotations' if annotated else ''}…"):
             try:
                 created = client.create_run(
@@ -325,13 +351,16 @@ def render_policy_log(log: pd.DataFrame) -> None:
     st.altair_chart(actions.properties(height=alt.Step(18)), width="stretch")
     if log["latency_ms"].astype(str).str.len().gt(0).any():
         latency = log[log["latency_ms"] != ""].astype({"latency_ms": float})
+        tooltip = ["frame", "latency_ms", "ram_mb", "cpu_percent"]
+        if "gpu_memory_mb" in log and log["gpu_memory_mb"].astype(str).str.len().gt(0).any():  # GPU profiles
+            tooltip.append("gpu_memory_mb")
         line = (
             alt.Chart(latency)
             .mark_line(strokeWidth=2, color=data.DETECTIONS_COLOR)
             .encode(
                 x=alt.X("frame:Q", title="Frame", scale=frames),
                 y=alt.Y("latency_ms:Q", title=None, axis=alt.Axis(**y_axis)),
-                tooltip=["frame", "latency_ms", "ram_mb", "cpu_percent"],
+                tooltip=tooltip,
             )
         )
         st.caption("Moving latency, ms (the window the Policy Engine compares with the frame budget)")

@@ -10,6 +10,10 @@ differ, so a noisy measurement is easy to spot.
 
     python benchmarks/profiles/measure.py --manifest data/manifest.json --modes A B D --profiles minimal standard \
         --scenario control_videos/MOT20-01/clean.mp4 --scenario control_videos/MOT20-01/fog_l2.mp4 --frames 150
+
+Besides the CSV it writes `profiles.md`: the median of every measurement as a Markdown table in the layout of
+docs/PROFILES.md, ready to paste there. A profile whose device this machine lacks (a GPU profile without CUDA) stops
+the script before anything is measured.
 """
 
 import argparse
@@ -26,7 +30,8 @@ import numpy as np
 import psutil
 import torch
 
-from resilens.config.loader import build_run_config
+from resilens.config.devices import check_profile_device, device_name
+from resilens.config.loader import build_run_config, load_profile
 from resilens.config.schema import Device
 from resilens.core.pipeline import Pipeline
 from resilens.io.replay import VideoReplay
@@ -74,6 +79,10 @@ def environment() -> dict:
         "ram_gb": round(psutil.virtual_memory().total / 2**30, 1),
         "torch": torch.__version__,
         "cuda": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "cuda_version": torch.version.cuda,
+        "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1)
+        if torch.cuda.is_available()
+        else None,
     }
 
 
@@ -81,6 +90,37 @@ def spread(values: list[float]) -> float:
     """(max - min) / median: how much the repeats of one measurement differ."""
     median = float(np.median(values))
     return (max(values) - min(values)) / median if median else 0.0
+
+
+def markdown_summary(rows: list[dict]) -> str:
+    """Median over repeats of each scenario x profile x mode, as a table in the layout of docs/PROFILES.md."""
+
+    def median(runs: list[dict], key: str, unit: str = "") -> str:
+        values = [run[key] for run in runs if key in run]
+        return f"{np.median(values):.0f}{unit}" if values else "—"
+
+    lines = [
+        "| Clip | Profile | Mode | p50 / p95 | Peak RAM | Peak CPU | Peak GPU memory | TANet | YOLOX | Tracker |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for row in rows:
+        groups.setdefault((row["scenario"], row["profile"], row["mode"]), []).append(row)
+    for (scenario, profile, mode), runs in groups.items():
+        cells = [
+            Path(scenario).stem,
+            profile,
+            mode,
+            f"{median(runs, 'latency_p50_ms')} / {median(runs, 'latency_p95_ms')} ms",
+            median(runs, "peak_ram_mb", " MB"),
+            median(runs, "peak_cpu_percent", " %"),
+            median(runs, "peak_gpu_memory_mb", " MB"),
+            median(runs, "stage_tanet_p50_ms", " ms"),
+            median(runs, "stage_yolox_nano_p50_ms", " ms"),
+            median(runs, "stage_flow_p50_ms", " ms"),
+        ]
+        lines.append(f"| {' | '.join(cells)} |")
+    return "\n".join(lines) + "\n"
 
 
 def main() -> None:
@@ -100,6 +140,14 @@ def main() -> None:
     missing = set(args.scenario or []) - set(scenarios)
     if missing:
         raise SystemExit(f"Scenarios not in the manifest: {sorted(missing)}")
+
+    for profile in args.profiles:  # fail before the first run, not after measuring the other profiles
+        try:
+            check_profile_device(load_profile(profile))
+        except RuntimeError as error:
+            raise SystemExit(str(error)) from error
+        if name := device_name(load_profile(profile).device):
+            print(f"Profile {profile} runs on {name}", flush=True)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.with_suffix(".json").write_text(json.dumps(environment(), indent=2), encoding="utf-8")
@@ -123,7 +171,8 @@ def main() -> None:
         writer = csv.DictWriter(file, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"{len(rows)} runs -> {args.output}")
+    args.output.with_suffix(".md").write_text(markdown_summary(rows), encoding="utf-8")
+    print(f"{len(rows)} runs -> {args.output}, summary table -> {args.output.with_suffix('.md')}")
 
 
 if __name__ == "__main__":
