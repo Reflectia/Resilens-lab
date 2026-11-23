@@ -10,6 +10,7 @@ The two locks differ only in the PyTorch build and the CUDA runtime packages it 
 """
 
 import argparse
+import difflib
 import subprocess
 import sys
 import tempfile
@@ -49,7 +50,10 @@ def main() -> int:
             if read(candidate) == read(current):
                 continue
             outdated.append(lock)
-            if not args.check:
+            if args.check:
+                diff = difflib.unified_diff(read(current), read(candidate), lock, f"{lock} (expected)", lineterm="")
+                print("\n".join(diff), file=sys.stderr)
+            else:
                 current.write_text("\n".join(read(candidate)) + "\n", encoding="utf-8")
 
     if args.check and outdated:

@@ -156,6 +156,7 @@ pandas==3.0.6
     #   streamlit
 pillow==12.3.0
     # via
+    #   resilens (pyproject.toml)
     #   imageio
     #   matplotlib
     #   scikit-image
