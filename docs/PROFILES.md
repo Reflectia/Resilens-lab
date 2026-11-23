@@ -64,11 +64,12 @@ it "(unavailable)" and does not start it, `POST /runs` answers 422, a CLI run fa
 
 ### 1. Set up the GPU machine
 
-Install the project as in the README, then replace the CPU build of PyTorch with a CUDA build. Pick the command for
-the machine's CUDA version at https://pytorch.org/get-started/locally/, for example:
+Install the project from the CUDA lock: it pins the same versions as `requirements.lock`, with the CUDA 13.0
+build of PyTorch and the CUDA runtime it needs. It replaces a CPU build of PyTorch already in the environment. The
+NVIDIA driver must be 580 or newer (`nvidia-smi` shows the version).
 
 ```bash
-pip install --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu128
+pip install -c requirements-cu130.lock --extra-index-url https://download.pytorch.org/whl/cu130 -e ".[dev]"
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
@@ -86,7 +87,8 @@ python benchmarks/profiles/measure.py --manifest data/manifest.json   --scenario
 ```
 
 The script prints the GPU it runs on and writes, in `benchmarks/profiles/_out/`:
-`profiles.csv` (one row per run), `profiles.json` (machine, GPU, CUDA and PyTorch versions, git commit) and
+`profiles.csv` (one row per run), `profiles.json` (git commit and uncommitted changes, machine, GPU, driver, CUDA,
+cuDNN, every package version and its difference from the lock; README, "Reproducibility") and
 `profiles.md` (median per clip, profile and mode, in the layout of the table below). Stage times are measured with
 CUDA synchronisation, so GPU work is counted in the stage that started it. Repeats that differ by more than ~10 %
 (`+/-` in the console) should be measured again.
@@ -119,6 +121,7 @@ shows *Peak GPU memory, MB* under Performance, and in mode D the policy log tool
 ### Results (to be filled in by the check)
 
 Machine: NVIDIA GeForce GTX 1650 (4 GiB), CUDA 12.8, PyTorch 2.9.1+cu128, AMD Ryzen 5 5500U (6 cores, 12 threads), 16 GiB RAM, Windows 11, commit `5c0f8b9`.
+These results predate the lock files: a new measurement from `requirements-cu130.lock` uses PyTorch 2.14.1+cu130.
 
 
 | Clip   | Profile     | Mode | p50 / p95      | Peak RAM | Peak CPU | Peak GPU memory | TANet   | YOLOX | Tracker |

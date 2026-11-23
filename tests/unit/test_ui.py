@@ -110,6 +110,7 @@ def test_page_shows_run_results_and_comparison(ui: AppTest, client, api, make_vi
     run_details = next(box for box in ui.selectbox if box.label == "Run details")
     assert run_details.value != first  # newest run first
     assert any("no ground-truth annotations" in caption.value for caption in ui.caption)
+    assert any(caption.value.startswith("Code: commit") for caption in ui.caption)
     compare = next(select for select in ui.multiselect if select.label == "Runs to compare")
     assert len(compare.value) == 2
     reference = next(box for box in ui.selectbox if box.label.startswith("Reference run"))

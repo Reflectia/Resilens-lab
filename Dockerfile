@@ -5,10 +5,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
 COPY configs ./configs
 
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .
+RUN pip install --no-cache-dir -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu -e .
+
+# The image has no .git: the commit runs record is passed at build time, see README ("Docker")
+ARG GIT_COMMIT=""
+ENV RESILENS_GIT_COMMIT=$GIT_COMMIT
 
 EXPOSE 8000 8501

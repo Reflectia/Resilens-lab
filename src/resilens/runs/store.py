@@ -87,6 +87,17 @@ class RunStore:
             path = self.run_dir(run_id) / "metrics.json"
             return _read_json(path) if path.is_file() else {}
 
+    def save_environment(self, run_id: str, environment: dict) -> None:
+        """Code version and environment the run is executed with."""
+        with self._lock:
+            _write_json(self.run_dir(run_id) / "environment.json", environment)
+
+    def load_environment(self, run_id: str) -> dict | None:
+        """None for runs executed before environments were recorded."""
+        with self._lock:
+            path = self.run_dir(run_id) / "environment.json"
+            return _read_json(path) if path.is_file() else None
+
     def save_report(self, run_id: str, report: dict) -> Path:
         with self._lock:
             path = self.run_dir(run_id) / "report.json"

@@ -88,7 +88,8 @@ def run_benchmark(
             _write_json(output_path, results)  # saved before it runs, so a crash leaves a trace to clean up
             manager.execute(run_id)
             record = manager.store.get(run_id)
-            result.update(status=record.status, error=record.error)
+            code = (manager.store.load_environment(run_id) or {}).get("code") or {}
+            result.update(status=record.status, error=record.error, git_commit=code.get("git_commit"))
             on_result(result)
             _write_json(output_path, results)
     return 1 if any(result["status"] != RunStatus.COMPLETED for result in results) else 0

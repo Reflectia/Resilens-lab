@@ -18,6 +18,7 @@ dependencies = [
     # Configuration
     "pydantic>=2.9",
     "pyyaml>=6.0",
+    "packaging>=24.0",           # reads the lock file when a run records its environment
     # Metrics and telemetry
     "pycocotools>=2.0.8",
     "trackeval==1.3.0",          # PyPI fork kovalp/TrackEval of JonathonLuiten/TrackEval with NumPy 2 support
@@ -46,6 +47,7 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.8",
+    "uv>=0.13",                  # writes the lock files: python scripts/lock_dependencies.py
 ]
 e2e = ["pytest-playwright>=0.10"]
 

@@ -29,6 +29,7 @@ router = APIRouter()
 RUN_FILES = {
     "config.json": "application/json",
     "fingerprint.json": "application/json",
+    "environment.json": "application/json",
     "metrics.json": "application/json",
     "report.json": "application/json",
     "detections.txt": "text/plain",
@@ -169,12 +170,18 @@ def get_run(run_id: str, manager: RunManager = Depends(get_manager)) -> RunInfo:
 
 @router.get("/runs/{run_id}/report", response_model=RunReport)
 def get_report(run_id: str, manager: RunManager = Depends(get_manager)) -> RunReport:
-    """Metrics of a completed run; 409 while it is queued, running or failed."""
+    """Metrics of a completed run with the code version and environment it ran with; 409 until it is completed."""
     record = get_record(manager, run_id)
     if record.status != RunStatus.COMPLETED:
         raise HTTPException(409, f"Run '{run_id}' is {record.status}, report is available once it is completed")
+    environment = manager.store.load_environment(run_id) or {}
     return RunReport(
-        run_id=run_id, mode=record.mode, profile=record.profile, metrics=manager.store.load_metrics(run_id)
+        run_id=run_id,
+        mode=record.mode,
+        profile=record.profile,
+        metrics=manager.store.load_metrics(run_id),
+        code=environment.get("code"),
+        environment=environment.get("environment"),
     )
 
 

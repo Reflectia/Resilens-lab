@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}  # GIT_COMMIT=$(git rev-parse HEAD) docker compose up --build
     command: uvicorn resilens.api.app:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
@@ -16,6 +18,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}  # GIT_COMMIT=$(git rev-parse HEAD) docker compose up --build
     command: streamlit run src/resilens/ui/app.py --server.address 0.0.0.0 --server.port 8501
     environment:
       RESILENS_API_URL: http://api:8000
