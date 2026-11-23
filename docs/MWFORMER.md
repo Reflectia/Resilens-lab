@@ -24,8 +24,15 @@ Mode C uses `original` unless stated otherwise. Download the files without an ex
 mkdir -p weights/mwformer
 mv original_backbone     weights/mwformer/backbone_original.pth
 mv original_style_filter weights/mwformer/stylefilter_original.pth
-sha256sum weights/mwformer/*.pth   # record the hashes next to the results
+sha256sum weights/mwformer/*.pth   # must print the hashes below
 ```
+
+| File | SHA-256 |
+| --- | --- |
+| `backbone_original.pth` | `0db07a0dfb163e56f57e7314b5dd7ce8a2252bf7f6baffca1788d45b23838f5c` |
+| `stylefilter_original.pth` | `d17e11329a82a4d3a7bd59ba78154cd6f07edeb1968632e59b1cb20fdf8c803a` |
+
+Keep a copy of both files on the team Drive; a different hash means a different variant of the model.
 
 ## Build the cache and run
 
@@ -37,9 +44,15 @@ python -m resilens.cli mwformer-cache data/scenarios/control_videos/MOT20-01/fog
 python -m resilens.cli run data/scenarios/control_videos/MOT20-01/fog_l2.mp4 --mode C --profile minimal
 ```
 
+`mwformer-cache` takes several videos. To compare mode C with the other modes, build the cache of every scenario the
+benchmark will use first, then run `python -m resilens.cli benchmark --modes A B C D --scenario ...` and `compare` as
+usual; mode C is compared with mode A like the others.
+
 Frames are cached in `data/mwformer_cache/` (git-ignored) as lossless PNG, keyed by the SHA-256 of the decoded frame,
 so one cache serves several videos and a rerun skips frames already restored. `index.json` there lists the videos and
-the SHA-256 of both weight files. A run on a video without a cache stops with an error that names the missing cache;
+the SHA-256 of both weight files. The key is the decoded pixels, so build the cache and run the benchmark with the same OpenCV version
+(`python -c "import cv2; print(cv2.__version__)"`); a different decoder can give other pixels, and the run then stops
+as described next. A run on a video without a cache stops with an error that names the missing cache;
 it never silently falls back to unrestored frames. The cache of one 300-frame 1080p clip is about 1 GB.
 
 The Run Store fingerprint of a run does not record the weights, so keep the cache's `index.json` with the results.

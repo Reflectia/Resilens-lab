@@ -125,7 +125,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_mwformer_cache(args: argparse.Namespace) -> int:
-    """Restore every frame of a video with MWFormer and cache the result for mode C."""
+    """Restore every frame of the given videos with MWFormer and cache the result for mode C."""
     from resilens.enhancement.mwformer_offline import MWFormerOfflineRunner
 
     for weights in (args.style_weights, args.backbone_weights):
@@ -138,8 +138,9 @@ def cmd_mwformer_cache(args: argparse.Namespace) -> int:
         if done % 25 == 0 or done == total:
             print(f"{done}/{total} frames", flush=True)
 
-    count = runner.run(args.video, args.cache_dir, progress)
-    print(f"Cached {count} frames of {args.video} in {args.cache_dir}")
+    for video in args.videos:
+        count = runner.run(video, args.cache_dir, progress)
+        print(f"Cached {count} frames of {video} in {args.cache_dir}")
     return 0
 
 
@@ -189,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.set_defaults(func=cmd_compare)
 
     cache = sub.add_parser("mwformer-cache", help="restore a video with MWFormer for mode C (offline baseline)")
-    cache.add_argument("video", type=Path)
+    cache.add_argument("videos", type=Path, nargs="+")
     cache.add_argument("--style-weights", type=Path, required=True)
     cache.add_argument("--backbone-weights", type=Path, required=True)
     cache.add_argument(

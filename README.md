@@ -1,6 +1,6 @@
 # Resilens v2.0
 
-Resilens is a platform for reproducible experiments with object detection and multi-object tracking in video under adverse conditions (fog, rain, low light, motion blur). It compares processing modes A–E by tracking quality, latency and resource usage.
+Resilens is a platform for reproducible experiments with object detection and multi-object tracking in video under adverse conditions (fog, rain, low light, motion blur). It compares processing modes A–D (no enhancement, TANet, MWFormer as an offline baseline, adaptive; mode E, the YOLOX fine-tune, is not implemented) by tracking quality, latency and resource usage.
 
 ## Running locally
 

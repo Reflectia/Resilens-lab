@@ -107,6 +107,22 @@ def test_cli_reports_missing_weights(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert "Weights not found" in capsys.readouterr().err
 
 
+def test_cli_caches_several_videos(
+    runner: MWFormerOfflineRunner, make_video: Callable[..., Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("resilens.enhancement.mwformer_offline.MWFormerOfflineRunner", lambda *a, **k: runner)
+    first, second, cache = make_video("a.avi", frames=2), make_video("b.avi", frames=3), tmp_path / "cache"
+
+    main(["mwformer-cache", str(first), str(second), *runner_weights(runner), "--cache-dir", str(cache)])
+
+    index = json.loads((cache / "index.json").read_text(encoding="utf-8"))
+    assert {name: info["frames"] for name, info in index["videos"].items()} == {"a.avi": 2, "b.avi": 3}
+
+
+def runner_weights(runner: MWFormerOfflineRunner) -> list[str]:
+    return ["--style-weights", str(runner.style_weights), "--backbone-weights", str(runner.backbone_weights)]
+
+
 @pytest.mark.real_weights
 def test_mwformer_restores_a_frame_at_its_size(request: pytest.FixtureRequest) -> None:
     weights = Path(request.config.getoption("--weights-dir")) / "mwformer"
