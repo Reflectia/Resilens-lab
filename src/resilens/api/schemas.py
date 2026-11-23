@@ -59,6 +59,8 @@ class RunReport(BaseModel):
     mode: str
     profile: str
     metrics: dict[str, float]
+    code: dict | None = None
+    environment: dict | None = None
     report_url: str | None = None
 
 

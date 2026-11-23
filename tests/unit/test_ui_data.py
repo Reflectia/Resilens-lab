@@ -5,6 +5,7 @@ import pandas as pd
 from resilens.ui.data import (
     comparison_table,
     default_comparison,
+    environment_summary,
     group_metrics,
     metric_info,
     parse_mot,
@@ -129,3 +130,43 @@ def test_peak_gpu_memory_is_a_performance_metric() -> None:
     ]
     assert "Other" not in groups
     assert metric_info("peak_gpu_memory_mb").better == "lower"
+
+
+ENVIRONMENT = {
+    "python": "3.13.3 (main, Apr  8 2025) [GCC]",
+    "platform": "Linux-6.8-x86_64",
+    "torch": "2.14.1+cpu",
+    "gpus": [],
+    "lock_file": "requirements.lock",
+    "differs_from_lock": {},
+}
+
+
+def test_environment_summary_of_a_clean_cpu_run() -> None:
+    code = {"git_commit": "7b6e1d628f1cf6a0585283201788448988cb454e", "git_branch": "main", "git_dirty": False}
+
+    lines = environment_summary({"code": code, "environment": ENVIRONMENT})
+
+    assert lines == [
+        "Code: commit 7b6e1d628f (main)",
+        "Environment: Python 3.13.3, PyTorch 2.14.1+cpu, CPU, Linux-6.8-x86_64",
+        "Dependencies: match requirements.lock",
+    ]
+
+
+def test_environment_summary_shows_what_makes_a_run_hard_to_reproduce() -> None:
+    code = {"git_commit": None, "git_dirty": True, "git_changed_files": ["a.py"], "git_untracked_files": ["b.py"]}
+    environment = {
+        **ENVIRONMENT,
+        "torch": "2.14.1+cu130",
+        "torch_cuda": "13.0",
+        "gpus": [{"name": "NVIDIA GeForce GTX 1650"}],
+        "differs_from_lock": {"numpy": {"locked": "2.5.4", "installed": "2.5.5"}},
+    }
+
+    code_line, environment_line, dependencies = environment_summary({"code": code, "environment": environment})
+
+    assert code_line == "Code: commit unknown, with uncommitted changes in 2 file(s)"
+    assert "NVIDIA GeForce GTX 1650, CUDA 13.0" in environment_line
+    assert dependencies == "Dependencies: 1 package(s) differ from requirements.lock: numpy 2.5.5 (locked 2.5.4)"
+    assert environment_summary({"code": {}, "environment": {}})[-1].startswith("Dependencies: no lock file")

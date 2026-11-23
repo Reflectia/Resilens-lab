@@ -74,6 +74,34 @@ def group_metrics(metrics: dict[str, float]) -> dict[str, list[tuple[Metric, flo
     return {title: rows for title, rows in groups.items() if rows}
 
 
+def environment_summary(recorded: dict) -> list[str]:
+    """Short lines on the code version and environment of a run (environment.json), for the run page."""
+    code, environment = recorded.get("code") or {}, recorded.get("environment") or {}
+    commit = code.get("git_commit")
+    version = f"Code: commit {commit[:10]}" if commit else "Code: commit unknown"
+    if code.get("git_branch"):
+        version += f" ({code['git_branch']})"
+    if code.get("git_dirty"):
+        files = len(code.get("git_changed_files", [])) + len(code.get("git_untracked_files", []))
+        version += f", with uncommitted changes in {files} file(s)"
+    lines = [version]
+    python = (environment.get("python") or "?").split()[0]
+    torch = environment.get("torch", "?")
+    gpus = environment.get("gpus") or []
+    device = f"{gpus[0]['name']}, CUDA {environment.get('torch_cuda')}" if gpus else "CPU"
+    lines.append(f"Environment: Python {python}, PyTorch {torch}, {device}, {environment.get('platform', '?')}")
+    lock = environment.get("lock_file")
+    differences = environment.get("differs_from_lock") or {}
+    if not lock:
+        lines.append("Dependencies: no lock file found, see the package list")
+    elif differences:
+        names = ", ".join(f"{name} {d['installed']} (locked {d['locked']})" for name, d in differences.items())
+        lines.append(f"Dependencies: {len(differences)} package(s) differ from {lock}: {names}")
+    else:
+        lines.append(f"Dependencies: match {lock}")
+    return lines
+
+
 def run_label(run: dict) -> str:
     return f"{run['mode']} · {run['profile']} · {run.get('source_name', '?')} · {run['run_id'][:6]}"
 

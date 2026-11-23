@@ -15,6 +15,7 @@ from resilens.config.loader import build_run_config
 from resilens.core.pipeline import Pipeline
 from resilens.detection.yolox_model import yolox_nano
 from resilens.enhancement.tanet_model import TANet
+from resilens.runs.fingerprint import run_environment
 from resilens.runs.manager import RunManager
 from resilens.testing.runs import STUB_METRICS, StubRunManager
 
@@ -269,6 +270,9 @@ def test_mode_a_runs_real_pipeline(video, uploads_dir, run_store, monkeypatch, t
     }
     assert timing_keys <= report["metrics"].keys()
     assert (run_store.run_dir(run_id) / "tracks.txt").is_file()
+    saved = json.loads((run_store.run_dir(run_id) / "report.json").read_text(encoding="utf-8"))
+    assert report["code"] == saved["code"] == run_environment()["code"]
+    assert report["environment"]["torch"] == saved["environment"]["torch"] == torch.__version__
 
 
 def test_mode_d_run_saves_policy_log_and_summary(video, uploads_dir, run_store, monkeypatch, tmp_path) -> None:
@@ -321,7 +325,14 @@ def test_run_files_are_listed_and_served(client, run_manager, video) -> None:
     tracks = client.get(f"/runs/{run_id}/files/tracks.txt")
     config = client.get(f"/runs/{run_id}/files/config.json")
 
-    assert names == ["config.json", "fingerprint.json", "metrics.json", "detections.txt", "tracks.txt"]
+    assert names == [
+        "config.json",
+        "fingerprint.json",
+        "environment.json",
+        "metrics.json",
+        "detections.txt",
+        "tracks.txt",
+    ]
     assert tracks.status_code == 200 and tracks.text.startswith("1,1,5")
     assert config.json()["mode"]["name"] == "A"
 

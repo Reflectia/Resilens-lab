@@ -15,9 +15,17 @@ class ReportGenerator:
         required = {"processing_time_s", "fps", "peak_ram_mb", "processed_frames"}
         if not required <= metrics.keys():
             raise ValueError(f"Run {run_id} has incomplete metrics")
+        environment = self.store.load_environment(run_id) or {}
         return self.store.save_report(
             run_id,
-            {"run_id": run_id, "mode": record.mode, "profile": record.profile, "metrics": metrics},
+            {
+                "run_id": run_id,
+                "mode": record.mode,
+                "profile": record.profile,
+                "metrics": metrics,
+                "code": environment.get("code"),  # commit the run was made with
+                "environment": environment.get("environment"),
+            },
         )
 
     def load_report(self, run_id: str) -> dict:

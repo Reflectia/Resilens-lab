@@ -10,8 +10,13 @@ Requires Python 3.13.
 python -m venv .venv
 source .venv/bin/activate             # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -e ".[dev]"
+pip install -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 ```
+
+`-c requirements.lock` installs the exact versions the project is tested with (CI and the Docker image install the
+same way), and the extra index provides the CPU build of PyTorch the lock pins. On a GPU machine use
+`requirements-cu130.lock` instead, see [GPU](#gpu-performance-profile). How runs record the code version and the
+environment, and how to update the locks: [Reproducibility](#reproducibility-code-version-and-environment).
 
 Put model weights into `weights/` and videos and scenarios into `data/` (both folders are excluded from git).
 TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
@@ -36,7 +41,7 @@ real analyzer and normal rules. The default test suite skips these tests, includ
 Run from the repository root with a short clip and matching COCO JSON and MOT TXT files.
 
 ```bash
-python -m pip install -e ".[dev,e2e]"
+python -m pip install -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev,e2e]"
 python -m playwright install chromium
 python -m pytest -v e2e --e2e-video "../data/control_videos/MOT20-01/clean.mp4" --e2e-coco "../data/ground_truth/MOT20-01_coco.json" --e2e-mot "../data/ground_truth/MOT20-01_gt.txt"
 ```
@@ -87,7 +92,9 @@ pytest                                   # tests
 ruff check .                             # linter
 ```
 
-Or run everything in Docker: `docker compose up --build`.
+Or run everything in Docker: `GIT_COMMIT=$(git rev-parse HEAD) docker compose up --build`. The image installs from
+`requirements.lock` and has no `.git`, so the commit is passed at build time; without `GIT_COMMIT` runs record the
+commit as unknown.
 
 ## Mode C (MWFormer, offline baseline)
 
@@ -95,11 +102,45 @@ Mode C reads frames that MWFormer restored in advance; build the cache with `pyt
 see [docs/MWFORMER.md](docs/MWFORMER.md) (weights, commands, preprocessing, first quality check).
 ### GPU (performance profile)
 
-The `performance` profile runs TANet and YOLOX on an NVIDIA GPU and needs a CUDA build of PyTorch (`pip install`
-above installs whatever build pip picks; on Windows and in the Docker image that is the CPU build). Install the CUDA
-build and check it as described in [docs/PROFILES.md](docs/PROFILES.md#gpu-check-of-the-performance-profile-d-10).
+The `performance` profile runs TANet and YOLOX on an NVIDIA GPU and needs the CUDA build of PyTorch, pinned in
+`requirements-cu130.lock` (CUDA 13.0, NVIDIA driver 580 or newer). On the GPU machine install from that lock instead:
+
+```bash
+pip install -c requirements-cu130.lock --extra-index-url https://download.pytorch.org/whl/cu130 -e ".[dev]"
+```
+
+Then check it as described in [docs/PROFILES.md](docs/PROFILES.md#gpu-check-of-the-performance-profile-d-10).
 Without a GPU the profile is listed as unavailable: `GET /profiles` gives the reason, the Web UI does not start it and
 `POST /runs` answers 422.
+
+## Reproducibility: code version and environment
+
+Every run records the code and the environment it was executed with, so its results can be reproduced and explained. 
+They are saved in `runs/<run_id>/environment.json` before processing starts, so failed runs have them too,
+and copied into the run report (`report.json`, `GET /runs/<run_id>/report`: fields `code` and `environment`):
+
+- `code`: git commit and branch, and whether the code had uncommitted changes (`git_dirty`): edited tracked files, a
+  hash of their diff, and new files in `src/` and `configs/` not committed yet. With uncommitted changes the commit
+  alone is not the code that ran.
+- `environment`: full Python version, OS, CPU, RAM, PyTorch, CUDA, cuDNN, NVIDIA driver and GPUs, and every installed
+  package with its exact version. `lock_file` names the lock the environment should match (`requirements.lock`, or
+  `requirements-cu130.lock` for a CUDA build of PyTorch), and `differs_from_lock` lists installed packages whose
+  version differs from it: empty when the environment was installed from the lock.
+
+The Web UI shows a summary on the run page under **Code and environment**; benchmark results name the commit of each
+run, and `benchmarks/profiles/measure.py` writes the same information to `profiles.json`. Both are captured once per
+process: the API records the code it was started with, so restart it after changing the code.
+
+To reproduce a run, check out its commit, install from the lock it names, and start it again with its
+`config.json`. The input hashes are in `fingerprint.json`.
+
+The lock files pin every dependency, including transitive ones and the dev and e2e extras, for any OS. After changing
+dependencies in `pyproject.toml`, update both locks and commit them together; CI fails while they do not match:
+
+```bash
+python scripts/lock_dependencies.py            # keeps locked versions that still fit pyproject.toml
+python scripts/lock_dependencies.py --upgrade-package numpy   # upgrade one package on purpose
+```
 
 ## Runs, modes and the Policy Engine
 

@@ -1,7 +1,9 @@
-"""Run Manager for API tests: real Run Store, execute() fakes processing with fixed metrics."""
+"""Run Manager for API tests: real Run Store, execute() records the environment and fakes processing with fixed
+metrics."""
 
 from threading import Event
 
+from resilens.runs.fingerprint import run_environment
 from resilens.runs.manager import RunManager
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
@@ -21,6 +23,7 @@ class StubRunManager(RunManager):
 
     def execute(self, run_id: str) -> None:
         self.store.update_status(run_id, RunStatus.RUNNING)
+        self.store.save_environment(run_id, run_environment())
         self.started.set()
         if self.release is not None:
             self.release.wait(timeout=5)

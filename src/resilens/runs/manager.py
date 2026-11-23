@@ -19,6 +19,7 @@ from resilens.metrics.telemetry import ResourceSampler
 from resilens.metrics.tracking import compute_tracking_metrics, export_mot_detections, export_mot_format
 from resilens.policy.log import export_policy_log, policy_summary
 from resilens.reports.generator import ReportGenerator
+from resilens.runs.fingerprint import run_environment
 from resilens.runs.models import RunStatus
 from resilens.runs.store import RunStore
 
@@ -64,9 +65,13 @@ class RunManager:
         return self.store.create_run(config).run_id
 
     def execute(self, run_id: str) -> None:
-        """Process a stored run, then persist its metrics, report and final status."""
+        """Process a stored run, then persist its metrics, report and final status.
+
+        The code version and environment are saved before processing, so a failed run can be explained too.
+        """
         self.store.update_status(run_id, RunStatus.RUNNING)
         try:
+            self.store.save_environment(run_id, run_environment())
             self.store.save_metrics(run_id, self._process_video(run_id))
             ReportGenerator(self.store).run_report(run_id)
             self.store.update_status(run_id, RunStatus.COMPLETED)

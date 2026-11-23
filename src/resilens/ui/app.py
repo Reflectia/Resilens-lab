@@ -376,6 +376,12 @@ def render_policy_log(log: pd.DataFrame) -> None:
 
 
 def render_config(run_id: str, files: list[str]) -> None:
+    if "environment.json" in files:
+        recorded = json.loads(cached_file(run_id, "environment.json"))
+        st.markdown("**Code and environment**")
+        st.caption("  \n".join(data.environment_summary(recorded)))
+        with st.expander("Code version and environment (every installed package)"):
+            st.json(recorded)
     if "config.json" in files:
         with st.expander("Configuration snapshot"):
             st.json(json.loads(cached_file(run_id, "config.json")))

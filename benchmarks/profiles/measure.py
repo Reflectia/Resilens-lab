@@ -20,15 +20,11 @@ import argparse
 import csv
 import itertools
 import json
-import platform
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
-import psutil
-import torch
 
 from resilens.config.devices import check_profile_device, device_name
 from resilens.config.loader import build_run_config, load_profile
@@ -39,6 +35,7 @@ from resilens.io.validation import VideoValidator
 from resilens.metrics.latency import latency_metrics
 from resilens.metrics.telemetry import ResourceSampler
 from resilens.policy.log import policy_summary
+from resilens.runs.fingerprint import run_environment
 
 OUT = Path(__file__).parent / "_out"
 SUMMARY_KEYS = ("latency_p50_ms", "latency_p95_ms", "latency_fps", "peak_ram_mb", "peak_cpu_percent")
@@ -68,22 +65,8 @@ def measure_run(scenario: Path, mode: str, profile: str, frames: int | None) -> 
 
 
 def environment() -> dict:
-    """What the numbers depend on, saved next to them (NFR-04)."""
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False).stdout.strip()
-    return {
-        "date": datetime.now(UTC).isoformat(timespec="seconds"),
-        "git_commit": commit,
-        "platform": platform.platform(),
-        "cpu": platform.processor(),
-        "logical_cpus": psutil.cpu_count(),
-        "ram_gb": round(psutil.virtual_memory().total / 2**30, 1),
-        "torch": torch.__version__,
-        "cuda": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-        "cuda_version": torch.version.cuda,
-        "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1)
-        if torch.cuda.is_available()
-        else None,
-    }
+    """What the numbers depend on, saved next to them: commit, machine, GPU / CUDA, every package version."""
+    return {"date": datetime.now(UTC).isoformat(timespec="seconds"), **run_environment()}
 
 
 def spread(values: list[float]) -> float:
