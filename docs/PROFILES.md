@@ -6,7 +6,7 @@ A resource profile (`configs/profiles/*.yaml`) describes the hardware a run may 
 
 | | minimal | standard | performance |
 | --- | --- | --- | --- |
-| Hardware | 2 CPUs, 4 GB RAM | 4 CPUs, 8 GB RAM | GPU (not measured yet) |
+| Hardware | 2 CPUs, 4 GB RAM | 4 CPUs, 8 GB RAM | NVIDIA GPU with CUDA (measured in D-10, see below) |
 | `cpu_threads` (PyTorch and OpenCV) | 2 | 4 | all cores |
 | Docker limits | `docker-compose.minimal.yml` | `docker-compose.standard.yml` | — |
 | `frame_budget_ms` | 300 | 200 | `null` |
@@ -53,6 +53,92 @@ MOT20-01, CPU only (no GPU on the measuring machine), one Windows laptop on main
 
 The budget correction works as intended: on standard, fog moves from `enhance` to `skip` once TANet on every frame pushes the moving latency over 200 ms, and on minimal the rule table already gives `skip`. Clean video costs as much as mode A (minimal: p50 / p95 170 / 177 ms).
 
+## GPU check of the performance profile (D-10)
+
+The performance profile runs TANet and YOLOX on CUDA (`device: cuda`); the analyzer and the flow tracker stay on the
+CPU. Its limits stay `null` until this check. Integration: Бучко Устим; measurement and check: Козло Богдан.
+
+What the code does without a GPU: `GET /profiles` reports the profile as unavailable with the reason, the Web UI marks
+it "(unavailable)" and does not start it, `POST /runs` answers 422, a CLI run fails before loading models, and
+`measure.py` stops before the first run.
+
+### 1. Set up the GPU machine
+
+Install the project as in the README, then replace the CPU build of PyTorch with a CUDA build. Pick the command for
+the machine's CUDA version at https://pytorch.org/get-started/locally/, for example:
+
+```bash
+pip install --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu128
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+The last line must print `True` and the GPU name. `nvidia-smi` should show no other process using the GPU while you
+measure (NFR-05: one experiment at a time). Put the weights into `weights/` and the MOT20 videos and
+`data/manifest.json` into `data/`, as for the CPU measurements.
+
+### 2. Measure
+
+The same clips, frames and repeats as the CPU measurements above, with `standard` on the same machine as the
+reference, so the GPU effect is not mixed with a different CPU:
+
+```bash
+python benchmarks/profiles/measure.py --manifest data/manifest.json   --scenario control_videos/MOT20-01/clean.mp4 --scenario control_videos/MOT20-01/fog_l2.mp4   --modes A B D --profiles standard performance --frames 60 --repeats 2 --warmup-runs 1
+```
+
+The script prints the GPU it runs on and writes, in `benchmarks/profiles/_out/`:
+`profiles.csv` (one row per run), `profiles.json` (machine, GPU, CUDA and PyTorch versions, git commit) and
+`profiles.md` (median per clip, profile and mode, in the layout of the table below). Stage times are measured with
+CUDA synchronisation, so GPU work is counted in the stage that started it. Repeats that differ by more than ~10 %
+(`+/-` in the console) should be measured again.
+
+### 3. Set the limits in `configs/profiles/performance.yaml`
+
+Proposed rules, the same as on the CPU profiles where they apply (agree the final values with TL):
+
+- `frame_budget_ms`: on performance the rule table asks for `enhance` on fog and rain, so the budget should let TANet
+  run on every frame: about 1.1 × the p95 latency of mode B. If mode B stays several times slower than mode A even on
+  the GPU, use 1.1 × p95 of mode A, as on standard, and note it here.
+- `gpu_memory_limit_mb`: the GPU's memory (`gpu_memory_gb` in `profiles.json`, in MB), or less if the GPU is shared.
+  The measured peak GPU memory must be well below it; the policy lowers the action at 90 % of the limit.
+- `memory_limit_mb`: there is no Docker limit for this profile; leave `null` unless the machine has a RAM budget. The
+  peak RAM goes into the table either way.
+- `cpu_threads`: `null` (all cores), unless the CPU part (the flow tracker) is to be limited.
+
+Then check mode D with the new limits, as for the CPU profiles:
+
+```bash
+python benchmarks/profiles/measure.py --manifest data/manifest.json   --scenario control_videos/MOT20-01/fog_l2.mp4 --scenario control_videos/MOT20-01/clean.mp4   --modes D --profiles performance --frames 100 --repeats 1 --warmup-runs 1
+```
+
+### 4. Check the profile in the Web UI
+
+Start the API and the UI on the GPU machine (README). On **New run** the profile list shows `performance · GPU` and
+the profile table shows `Device: GPU: <name>`. Start mode B on a short clip with this profile; the completed run
+shows *Peak GPU memory, MB* under Performance, and in mode D the policy log tooltip shows `gpu_memory_mb`.
+
+### Results (to be filled in by the check)
+
+Machine: NVIDIA GeForce GTX 1650 (4 GiB), CUDA 12.8, PyTorch 2.9.1+cu128, AMD Ryzen 5 5500U (6 cores, 12 threads), 16 GiB RAM, Windows 11, commit `5c0f8b9`.
+
+
+| Clip   | Profile     | Mode | p50 / p95      | Peak RAM | Peak CPU | Peak GPU memory | TANet   | YOLOX | Tracker |
+| ------ | ----------- | ---- | -------------- | -------- | -------- | --------------- | ------- | ----- | ------- |
+| clean  | standard    | A    | 240 / 267 ms   | 767 MB   | 543 %    | —               | —       | 48 ms | 187 ms  |
+| clean  | standard    | B    | 944 / 985 ms   | 1027 MB  | 463 %    | —               | 797 ms  | 39 ms | 105 ms  |
+| clean  | performance | A    | 177 / 180 ms   | 1294 MB  | 929 %    | 30 MB           | —       | 35 ms | 138 ms  |
+| clean  | performance | B    | 234 / 246 ms   | 1456 MB  | 749 %    | 182 MB          | 102 ms  | 22 ms | 106 ms  |
+| fog_l2 | standard    | A    | 121 / 126 ms   | 1469 MB  | 526 %    | —               | —       | 40 ms | 77 ms   |
+| fog_l2 | standard    | B    | 1346 / 1414 ms | 1505 MB  | 447 %    | —               | 1230 ms | 49 ms | 62 ms   |
+| fog_l2 | performance | A    | 118 / 121 ms   | 1395 MB  | 918 %    | 182 MB          | —       | 35 ms | 79 ms   |
+| fog_l2 | performance | B    | 189 / 197 ms   | 1464 MB  | 778 %    | 182 MB          | 102 ms  | 23 ms | 60 ms   |
+
+Mode D with the chosen limits: _actions, share of frames TANet ran on, frames within budget (as in "Mode D with
+these limits" above)._
+
+Chosen limits and why: _frame_budget_ms, gpu_memory_limit_mb, memory_limit_mb._
+
+Web UI check: _profile shown as GPU with the device name; run completed; peak GPU memory shown._
+
 ## Measuring again
 
 ```bash
@@ -74,6 +160,6 @@ Runs through `POST /runs` and `benchmark` report the same figures in their metri
 
 ## Open points
 
-- The **performance** profile needs a machine with a GPU; its limits stay `null` until then.
+- The **performance** profile needs a machine with a GPU; its limits stay `null` until the D-10 check above.
 - **Measure on a stable machine** (or in Docker) before using the limits for the final comparison (T-18).
 - Whether the one-step budget correction is enough (see `docs/POLICY.md`) is still with TL/PM. With these limits `skip` fits the budget on both profiles, so in these runs one step was enough.

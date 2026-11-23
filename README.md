@@ -93,6 +93,13 @@ Or run everything in Docker: `docker compose up --build`.
 
 Mode C reads frames that MWFormer restored in advance; build the cache with `python -m resilens.cli mwformer-cache`,
 see [docs/MWFORMER.md](docs/MWFORMER.md) (weights, commands, preprocessing, first quality check).
+### GPU (performance profile)
+
+The `performance` profile runs TANet and YOLOX on an NVIDIA GPU and needs a CUDA build of PyTorch (`pip install`
+above installs whatever build pip picks; on Windows and in the Docker image that is the CPU build). Install the CUDA
+build and check it as described in [docs/PROFILES.md](docs/PROFILES.md#gpu-check-of-the-performance-profile-d-10).
+Without a GPU the profile is listed as unavailable: `GET /profiles` gives the reason, the Web UI does not start it and
+`POST /runs` answers 422.
 
 ## Runs, modes and the Policy Engine
 
@@ -122,8 +129,9 @@ recall) and tracking (HOTA, IDF1, ID switches) metrics.
 `http://127.0.0.1:8000`). The UI works only through the REST API:
 
 - **New run**: upload an MP4/AVI video, optionally its COCO (`.json`) and MOT (`.txt`) ground-truth annotations to get
-  quality metrics, pick a mode (with its stages) and a resource profile (with its limits), choose offline or realtime
-  replay, start the run and follow its status.
+  quality metrics, pick a mode (with its stages) and a resource profile (with its device and limits; a GPU profile
+  shows the API host's GPU, or why it cannot run there), choose offline or realtime replay, start the run and follow
+  its status.
 - **Runs**: every run with status, video, duration and error; for a completed run its metrics (performance, pipeline
   output, detection and tracking quality when the run had annotations, Policy Engine shares), the annotated video,
   detections and tracks per frame, the track list, the policy decisions per frame (mode D), the config snapshot and

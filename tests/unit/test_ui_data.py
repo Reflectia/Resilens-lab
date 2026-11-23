@@ -117,3 +117,15 @@ def test_default_comparison_is_one_video_with_the_newest_run_per_mode() -> None:
     assert default_comparison(runs) == ["a1", "d2"]
     assert default_comparison(runs[:2]) == ["d2", "b1"]  # one mode on fog.mp4: the two newest runs
     assert default_comparison([]) == []
+
+
+def test_peak_gpu_memory_is_a_performance_metric() -> None:
+    groups = group_metrics({"peak_ram_mb": 900.0, "peak_gpu_memory_mb": 1234.4, "fps": 20.0})
+
+    assert [(m.label, m.format(v)) for m, v in groups["Performance"]] == [
+        ("FPS", "20.00"),
+        ("Peak RAM, MB", "900"),
+        ("Peak GPU memory, MB", "1234"),
+    ]
+    assert "Other" not in groups
+    assert metric_info("peak_gpu_memory_mb").better == "lower"
