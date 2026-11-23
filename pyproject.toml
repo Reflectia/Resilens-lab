@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resilens"
-version = "2.0.0.dev0"
+version = "2.0.0"
 description = "Platform for adaptive detection and multi-object tracking in degraded video"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -39,8 +39,6 @@ dependencies = [
     "streamlit>=1.40",
     "httpx>=0.27",               # Web UI -> REST API client
     # YOLOX (Apache-2.0): model code is vendored in src/resilens/detection/yolox_model.py
-    # TODO: verify Python 3.13 compatibility, then pin as git dependencies:
-    #   ByteTrack  https://github.com/ifzhang/ByteTrack            (MIT)
 ]
 
 [project.optional-dependencies]
