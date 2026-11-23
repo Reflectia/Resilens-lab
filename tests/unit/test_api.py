@@ -11,6 +11,7 @@ import torch
 from fastapi.testclient import TestClient
 
 from resilens.api.app import create_app
+from resilens.config.loader import build_run_config
 from resilens.core.pipeline import Pipeline
 from resilens.detection.yolox_model import yolox_nano
 from resilens.enhancement.tanet_model import TANet
@@ -474,3 +475,48 @@ def test_annotated_run_gets_quality_metrics(video, uploads_dir, run_store, monke
     assert (run["status"], run["error"]) == ("completed", None)
     assert {"map_50_95", "precision", "recall", "hota", "idf1", "id_switches"} <= metrics.keys()
     assert metrics["recall"] == 0  # FakePipeline detects nothing
+
+
+def test_profiles_report_a_gpu_profile_unavailable_without_cuda(client, no_cuda) -> None:
+    profiles = {profile["name"]: profile for profile in client.get("/profiles").json()}
+
+    assert profiles["minimal"]["available"] and profiles["standard"]["available"]
+    assert profiles["minimal"]["device_name"] is None
+    performance = profiles["performance"]
+    assert (performance["device"], performance["available"], performance["device_name"]) == ("cuda", False, None)
+    assert "no CUDA support" in performance["unavailable_reason"]
+
+
+def test_profiles_name_the_gpu_with_cuda(client, fake_cuda) -> None:
+    performance = next(p for p in client.get("/profiles").json() if p["name"] == "performance")
+
+    assert (performance["available"], performance["device_name"]) == (True, fake_cuda)
+    assert performance["unavailable_reason"] is None
+
+
+def test_gpu_run_without_cuda_is_rejected_and_not_kept(client, run_manager, video, uploads_dir, no_cuda) -> None:
+    response = post_run(client, video, profile="performance")
+
+    assert response.status_code == 422
+    assert "Profile 'performance' needs a CUDA device" in response.json()["detail"]
+    assert_nothing_stored(run_manager, uploads_dir)
+
+
+def test_gpu_run_is_queued_with_cuda(client, run_manager, video, fake_cuda) -> None:
+    response = post_run(client, video, profile="performance")
+
+    assert response.status_code == 202
+    assert run_manager.store.load_config(response.json()["run_id"]).profile.device == "cuda"
+
+
+def test_queued_gpu_run_fails_fast_when_cuda_is_gone(video, run_store, monkeypatch, no_cuda) -> None:
+    """A CLI run, or an API run queued before the GPU disappeared, fails with the reason before loading models."""
+    monkeypatch.setattr(Pipeline, "from_config", lambda config: pytest.fail("pipeline must not be built"))
+    manager = RunManager(run_store)
+    run_id = manager.submit(build_run_config("A", "performance", video))
+
+    manager.execute(run_id)
+
+    record = run_store.get(run_id)
+    assert record.status == "failed"
+    assert record.error.startswith("Profile 'performance' needs a CUDA device: this PyTorch build has no CUDA")

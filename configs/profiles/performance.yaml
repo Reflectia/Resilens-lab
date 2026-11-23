@@ -1,5 +1,5 @@
 name: performance
-device: cuda
+device: cuda  # TANet and YOLOX on the GPU
 cpu_threads: null
 max_resolution: null  # (width, height); larger videos are rejected
 downscale_resolution: [1280, 720]  # (width, height) for the policy's downscale action

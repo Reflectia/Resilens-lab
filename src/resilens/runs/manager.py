@@ -7,6 +7,7 @@ one run at a time; it reads runs through `store`.
 import json
 import time
 
+from resilens.config.devices import check_profile_device
 from resilens.config.schema import Device, RunConfig
 from resilens.core.contracts import VideoInfo
 from resilens.core.pipeline import Pipeline
@@ -74,6 +75,7 @@ class RunManager:
 
     def _process_video(self, run_id: str) -> dict[str, float]:
         config = self.store.load_config(run_id)
+        check_profile_device(config.profile)
         self.store.verify_source(run_id)
         self.store.verify_annotations(run_id)
         video = VideoValidator(max_resolution=config.profile.max_resolution).validate(config.source)
