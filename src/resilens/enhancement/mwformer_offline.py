@@ -13,12 +13,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 
 from resilens.enhancement.mwformer_model.EncDec import Network_top
 from resilens.enhancement.mwformer_model.style_filter64 import StyleFilter_Top
 
 MAX_SIDE = 1024  # MWFormer restores at most this many pixels along the longer side
 SIZE_MULTIPLE = 16
+MIN_SIDE = 64  # the network needs at least 48 pixels per side; checked on the original weights
 CACHE_INDEX = "index.json"
 
 
@@ -43,9 +45,13 @@ def load_state_dict(weights_path: Path) -> dict[str, torch.Tensor]:
 
 
 def model_size(width: int, height: int) -> tuple[int, int]:
-    """Size MWFormer works at: longer side at most 1024, both sides rounded up to a multiple of 16."""
-    scale = min(1.0, MAX_SIDE / max(width, height))
-    rounded_up = [SIZE_MULTIPLE * -(-round(side * scale) // SIZE_MULTIPLE) for side in (width, height)]
+    """Size MWFormer works at, as in the authors' test.py: the longer side at most 1024, both sides rounded up to a
+    multiple of 16, and at least MIN_SIDE because the network fails on smaller inputs."""
+    if height > width and height > MAX_SIDE:
+        width, height = int(np.ceil(width * MAX_SIDE / height)), MAX_SIDE
+    elif width > MAX_SIDE:
+        width, height = MAX_SIDE, int(np.ceil(height * MAX_SIDE / width))
+    rounded_up = [max(MIN_SIDE, SIZE_MULTIPLE * int(np.ceil(side / SIZE_MULTIPLE))) for side in (width, height)]
     return rounded_up[0], rounded_up[1]
 
 
@@ -71,8 +77,8 @@ class MWFormerOfflineRunner:
         assert self._backbone is not None and self._style_filter is not None
         height, width = image.shape[:2]
         size = model_size(width, height)
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        rgb = cv2.resize(rgb, size, interpolation=cv2.INTER_LANCZOS4)
+        # Pillow's Lanczos filters before shrinking, as in the authors' code; cv2's does not and gives other input
+        rgb = np.array(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).resize(size, Image.Resampling.LANCZOS))
         x = torch.from_numpy(rgb).permute(2, 0, 1).float().unsqueeze(0).to(self.device) / 255 * 2 - 1  # [-1, 1]
         with torch.inference_mode():
             y = self._backbone(x, self._style_filter(x)).clamp(0, 1)

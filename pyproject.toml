@@ -14,6 +14,7 @@ dependencies = [
     "opencv-python>=4.11",       # trackeval needs >= 4.11; 5.x checked: tests, TrackEval and benchmark metrics unchanged
     "torch>=2.6",
     "torchvision>=0.21",
+    "pillow>=10",                # MWFormer preprocessing (Lanczos resize as in the authors' code)
     "timm>=1.0",                 # used by TANet / MWFormer model code
     # Configuration
     "pydantic>=2.9",

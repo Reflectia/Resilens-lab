@@ -31,9 +31,16 @@ def runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MWFormerOfflineRu
 
 @pytest.mark.parametrize(
     ("size", "expected"),
-    [((1920, 1080), (1024, 576)), ((1080, 1920), (576, 1024)), ((64, 48), (64, 48)), ((100, 50), (112, 64))],
+    [
+        ((1920, 1080), (1024, 576)),
+        ((1080, 1920), (576, 1024)),
+        ((640, 480), (640, 480)),
+        ((100, 50), (112, 64)),
+        ((33, 17), (64, 64)),
+        ((1500, 1000), (1024, 688)),
+    ],
 )
-def test_model_size_is_at_most_1024_and_multiple_of_16(size: tuple[int, int], expected: tuple[int, int]) -> None:
+def test_model_size_is_follows_the_authors_rules(size: tuple[int, int], expected: tuple[int, int]) -> None:
     assert model_size(*size) == expected
 
 

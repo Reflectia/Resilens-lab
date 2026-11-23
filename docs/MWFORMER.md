@@ -58,14 +58,25 @@ is the feature vector the backbone is conditioned on.
 code outside the project. Changes: absolute imports, `timm.layers` instead of the deprecated `timm.models.layers`, no
 `pdb`. The folder is excluded from ruff.
 
-## First check of the `original` variant
+## Checks
 
-One frame (100) of MOT20-01 and MOT20-02, `fog_l2`, 1080p, PSNR against the clean clip:
+- The restored frame equals the authors' pipeline (PIL Lanczos, `test.py` sizing) bit for bit on a 1080p frame
+  (`tests/unit/test_mwformer.py::test_mwformer_restores_a_frame_at_its_size` needs the weights; the sizing rules are
+  tested without them). Pillow's Lanczos filters before shrinking and OpenCV's does not; with OpenCV the output
+  differed by up to 47 gray levels, so the resize uses Pillow.
+- The network fails on inputs smaller than 48 pixels per side, so the runner works at 64 pixels at least.
+- The output is deterministic and has the input's size for odd and portrait sizes.
+
+## First quality check of the `original` variant
+
+PSNR against the clean clip, `fog_l2`, 1080p, two frames (50 and 150) per clip, CPU:
 
 | Clip | Fogged | TANet | MWFormer `original` |
 | --- | --- | --- | --- |
-| MOT20-01 | 8.9 dB | 16.8 dB | 15.9 dB |
-| MOT20-02 | 9.0 dB | 13.7 dB | 9.5 dB |
+| MOT20-01 | 8.9 / 8.9 dB | 19.1 / 16.0 dB | 19.0 / 17.8 dB |
+| MOT20-02 | 9.0 / 9.1 dB | 16.3 / 20.4 dB | 10.4 / 13.1 dB |
+| MOT20-03 | 7.8 / 7.5 dB | 10.6 / 10.3 dB | 8.3 / 8.2 dB |
+| MOT20-05 | 6.1 / 6.3 dB | 8.4 / 10.0 dB | 6.0 / 6.7 dB |
 
-On the generated fog the `original` variant removes little of it, clearly less than TANet. Two frames are only a
-smoke test, not a result; compare the variants (`ar`, `ar_ws`) on more frames before drawing conclusions for LR5.
+On MOT20-01 MWFormer is on par with TANet; on the other clips it removes much less fog. Eight frames are a smoke
+test, not a result: compare the variants (`ar`, `ar_ws`) on whole clips before drawing conclusions for LR5.
