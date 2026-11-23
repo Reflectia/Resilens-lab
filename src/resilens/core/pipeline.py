@@ -9,6 +9,7 @@ import torch
 # Importing the stage modules registers their classes under the names used in configs/modes/*.yaml
 import resilens.detection.yolox  # noqa: F401
 import resilens.enhancement.bypass  # noqa: F401
+import resilens.enhancement.mwformer_cache  # noqa: F401
 import resilens.enhancement.tanet  # noqa: F401
 import resilens.tracking.flow_tracker  # noqa: F401
 from resilens.analysis.analyzer import DegradationAnalyzer
