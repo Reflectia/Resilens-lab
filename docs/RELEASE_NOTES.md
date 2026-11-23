@@ -1,6 +1,6 @@
 # Resilens 2.0.0 — Release Notes
 
-**Tag:** `v2.0.0` · **Commit:** `[hash]` · **Release date:** `23.11.2026` · **Repository:** https://github.com/Reflectia/Resilens-lab
+**Tag:** `v2.0.0` · **Commit:** `0acec56` · **Release date:** `23.11.2026` · **Repository:** https://github.com/Reflectia/Resilens-lab
 
 ## Overview
 
