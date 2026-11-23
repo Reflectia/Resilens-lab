@@ -1,6 +1,6 @@
 # Resilens v2.0
 
-Resilens is a platform for reproducible experiments with object detection and multi-object tracking in video under adverse conditions (fog, rain, low light, motion blur). It compares processing modes A–E by tracking quality, latency and resource usage.
+Resilens is a platform for reproducible experiments with object detection and multi-object tracking in video under adverse conditions (fog, rain, low light, motion blur). It compares processing modes A–D (no enhancement, TANet, MWFormer as an offline baseline, adaptive; mode E, the YOLOX fine-tune, is not implemented) by tracking quality, latency and resource usage.
 
 ## Running locally
 
@@ -96,6 +96,10 @@ Or run everything in Docker: `GIT_COMMIT=$(git rev-parse HEAD) docker compose up
 `requirements.lock` and has no `.git`, so the commit is passed at build time; without `GIT_COMMIT` runs record the
 commit as unknown.
 
+## Mode C (MWFormer, offline baseline)
+
+Mode C reads frames that MWFormer restored in advance; build the cache with `python -m resilens.cli mwformer-cache`,
+see [docs/MWFORMER.md](docs/MWFORMER.md) (weights, commands, preprocessing, first quality check).
 ### GPU (performance profile)
 
 The `performance` profile runs TANet and YOLOX on an NVIDIA GPU and needs the CUDA build of PyTorch, pinned in
