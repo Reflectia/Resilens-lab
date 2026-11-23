@@ -89,6 +89,11 @@ ruff check .                             # linter
 
 Or run everything in Docker: `docker compose up --build`.
 
+## Mode C (MWFormer, offline baseline)
+
+Mode C reads frames that MWFormer restored in advance; build the cache with `python -m resilens.cli mwformer-cache`,
+see [docs/MWFORMER.md](docs/MWFORMER.md) (weights, commands, preprocessing, first quality check).
+
 ## Runs, modes and the Policy Engine
 
 Start a run through the REST API with a mode (A–E, `configs/modes/`), a resource profile (`configs/profiles/`) and how the video is fed:

@@ -63,6 +63,7 @@ markers = ["integration", "real_weights: local tests requiring trained weights a
 line-length = 120
 target-version = "py313"
 src = ["src", "tests", "e2e"]
+extend-exclude = ["src/resilens/enhancement/mwformer_model"]  # third-party inference code, kept as it is
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

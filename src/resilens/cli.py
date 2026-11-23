@@ -124,6 +124,25 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mwformer_cache(args: argparse.Namespace) -> int:
+    """Restore every frame of a video with MWFormer and cache the result for mode C."""
+    from resilens.enhancement.mwformer_offline import MWFormerOfflineRunner
+
+    for weights in (args.style_weights, args.backbone_weights):
+        if not weights.is_file():
+            print(f"Weights not found: {weights}", file=sys.stderr)
+            return 1
+    runner = MWFormerOfflineRunner(args.style_weights, args.backbone_weights, device=args.device)
+
+    def progress(done: int, total: int) -> None:
+        if done % 25 == 0 or done == total:
+            print(f"{done}/{total} frames", flush=True)
+
+    count = runner.run(args.video, args.cache_dir, progress)
+    print(f"Cached {count} frames of {args.video} in {args.cache_dir}")
+    return 0
+
+
 def cmd_build_scenarios(args: argparse.Namespace) -> None:
     pass
 
@@ -168,6 +187,16 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--output", type=Path, required=True)
     compare.add_argument("--manifest", type=Path, help="manifest used for degradation grouping")
     compare.set_defaults(func=cmd_compare)
+
+    cache = sub.add_parser("mwformer-cache", help="restore a video with MWFormer for mode C (offline baseline)")
+    cache.add_argument("video", type=Path)
+    cache.add_argument("--style-weights", type=Path, required=True)
+    cache.add_argument("--backbone-weights", type=Path, required=True)
+    cache.add_argument(
+        "--cache-dir", type=Path, default=DATA_DIR / "mwformer_cache", help="default: data/mwformer_cache"
+    )
+    cache.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
+    cache.set_defaults(func=cmd_mwformer_cache)
 
     scen = sub.add_parser("build-scenarios", help="generate degraded control clips")
     scen.add_argument("source_dir", type=Path)

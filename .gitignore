@@ -18,6 +18,7 @@ dist/
 # Data, weights and run artifacts (kept out of git, see README)
 data/scenarios/*
 data/uploads/*
+data/mwformer_cache/*
 weights/*
 runs/*
 !**/.gitkeep
