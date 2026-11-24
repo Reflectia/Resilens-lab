@@ -1,8 +1,7 @@
 # Resilens 2.0 Test Summary Report
 
-- **Status:** Draft
-- **Development baseline:** `main` at `ce6407b` (`2.0.0.dev0`)
-- **Final release tag and commit:** TBD
+- **Status:** Complete
+- **Release candidate:** `9dbf188` (`2.0.0`)
 
 ## Test environments
 
@@ -16,11 +15,11 @@
 
 ## Test results
 
-The table includes CI results from the development baseline and earlier local checks. Final release testing is pending.
+The table summarizes [CI on the release candidate][ci] and local checks completed on earlier development revisions.
 
 | Check                            | Result                                              | Evidence              |
 | -------------------------------- | --------------------------------------------------- | --------------------- |
-| Default CI suite                 | 434 passed, 16 skipped, 0 failed                    | [CI run][ci]          |
+| Default CI suite                 | 448 passed, 16 skipped, 0 failed                    | [CI run][ci]          |
 | Pipeline smoke tests             | 2 passed in modes A and B, included in the CI total | [CI run][ci]          |
 | Integration with trained weights | 14 passed in modes A and D in Lab 4                 | [PR #18][integration] |
 | Web UI end-to-end tests          | 7 passed locally in T-23                            | [PR #21][e2e]         |
@@ -29,7 +28,7 @@ The table includes CI results from the development baseline and earlier local ch
 
 ### What the tests cover
 
-- **CI and regression tests.** The default suite checks video input, run management, policy rules, reports, and quality metrics. Regression tests cover dropped frames counting as missed detections and rejection of mismatched annotations. Lint and formatting passed on `ce6407b` on 23 Nov 2026.
+- **CI and regression tests.** The default suite checks video input, run management, policy rules, reports, and quality metrics. Regression tests cover dropped frames counting as missed detections and rejection of mismatched annotations. Lint and formatting passed on the CI-tested revision `7f33adb`.
 - **Pipeline smoke tests.** Modes A and B process a three-frame clip with model test doubles. The tests check completion, the run ID and metrics in the report, and the saved detections and tracks. They confirm that B applies TANet before detection and that A processes the original frames.
 - **Integration with trained weights.** The tests run modes A and D with TANet and YOLOX-Nano across the three resource profiles. They check D's bypass and enhancement actions, the policy log, and the real analyzer in a separate test. They also check failures caused by missing weights or an invalid video. These 14 tests are skipped by default in CI because they require local test assets.
 - **Web UI end-to-end tests.** The browser tests cover a completed mode A run, video playback and results that match the API, quality metrics from COCO and MOT annotations, and clear errors for invalid video, an unavailable API, missing weights, or incomplete or mismatched annotations. The browser suite runs separately from the default CI job.
@@ -56,7 +55,8 @@ The table includes CI results from the development baseline and earlier local ch
 | DEF-04 | A configuration change lowered detection coverage. | Fixed  | Retested in Lab 4.                                   |
 | DEF-05 | Low detection and tracking scores.                 | Closed | [Benchmark evidence](benchmark-report.md)             |
 
-[ci]: https://github.com/Reflectia/Resilens-lab/actions/runs/45230902170
+[ci]: https://github.com/Reflectia/Resilens-lab/actions/runs/45290983882
+[release-pr]: https://github.com/Reflectia/Resilens-lab/pull/27
 [integration]: https://github.com/Reflectia/Resilens-lab/pull/18
 [e2e]: https://github.com/Reflectia/Resilens-lab/pull/21
 [mode-c]: https://github.com/Reflectia/Resilens-lab/pull/24
