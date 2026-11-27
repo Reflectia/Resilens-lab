@@ -85,7 +85,16 @@ In mode D the Policy Engine may downscale some frames. The tracker then runs opt
 
 ### Evaluating the results
 
-See README, [Quality benchmark](../README.md#quality-benchmark).
+The `benchmark` and `compare` commands evaluate the tracks of every mode and compare them with mode A (README,
+"Quality benchmark"). Tracking quality is HOTA, IDF1 and ID switches from TrackEval, computed against the full MOT
+ground truth (`src/resilens/metrics/tracking.py`).
+
+- **The scores are low whatever the mode.** FlowTracker follows only the targets it takes from the first frame with
+  detections, and the ground truth contains every person, so everyone else counts as missed (DEF-05). Compare modes
+  with each other, not with an absolute value.
+- **Targets depend on the mode.** Each mode picks its targets from its own first detections, so a difference between
+  modes in the tracking scores is partly a difference in targets. Read it together with the detection metrics.
+- **Every run processes the whole video**, even when all targets are lost, so frame counts match between runs.
 
 ## Limitations
 

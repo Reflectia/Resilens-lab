@@ -10,7 +10,7 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 4. Author self-reviews the diff first and ticks the author checklist.
 5. A PR needs at least **1 approval** before merge.
 6. A PR is merged only when CI (GitHub Actions) is green: `CI` (`ruff check .`, `ruff format --check .`, `pytest tests`) and `PR title` (format `T-<id>: ...`).
-7. The author merges their own PR only after approval, using **Create a merge commit**; delete the branch.
+7. The author merges their own PR only after approval, using **Create a merge commit** (the "Merge pull request #N" commits on `main`); delete the branch.
 
 ## 2. Review timing (SLA)
 
@@ -19,7 +19,7 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 
 ## 3. PR titles and commits
 
-The **PR title** is what matters: it goes into the merge commit message on `main`.
+The **PR title** is what matters: it is the title of the merge commit's pull request and is what the history of `main` shows.
 
 Format: `T-<id>: <imperative summary, max ~72 chars>`. Subtasks use the parent task id: task T-04-0 is titled `T-04: ...`.
 
@@ -27,7 +27,7 @@ Good: `T-21: add confidence threshold validation to YOLOX config`
 Bad: `fix`, `changes`, `wip`, `final final 2`
 
 Rules:
-- Commits inside a PR stay in the history of `main`, so each one needs a meaningful message (no `wip` spam).
+- Commits inside a PR are free-form but meaningful (no `wip` spam); they stay in the history of `main`.
 - No secrets, model weights, videos, or generated files (`runs/`, `data/`, `weights/`).
 
 ## 4. Reviewer checklist
@@ -74,13 +74,7 @@ Rules:
 
 ## 7. Repo settings and enforcement
 
-The repository is public, so GitHub branch protection is available on the free plan. Protect `main` (Settings → Branches → Add branch protection rule):
+The repository is public, so GitHub's branch protection is available on the free plan (Settings → Branches → rule for `main`: require a pull request, 1 approval and the `CI` and `PR title` checks). It is **not enabled yet**, so the rules above are a team agreement that GitHub does not check for us: nobody merges a PR with a red CI or without an approval, and nobody pushes directly to `main`. Enabling the branch protection rule is recommended. Settings that help in any case (Settings → General → Pull Requests):
 
-- Require a pull request before merging, with **1 approval**.
-- Require the status checks `CI` and `PR title` to pass.
-- Do not allow force pushes or deletions.
-
-Settings → General → Pull Requests:
-
-- Allow **merge commits**; default message = **Pull request title**.
+- Allow **merge commits** only, the way the team merges today (turn off squash and rebase merging).
 - Enable **Automatically delete head branches**.

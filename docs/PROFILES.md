@@ -145,7 +145,10 @@ Chosen limits and why:
 - `gpu_memory_limit_mb: 4096`: the memory of the GTX 1650; the measured peak (182 MB) is far below it.
 - `memory_limit_mb` and `cpu_threads`: `null` (no Docker limit for this profile, all cores).
 
-Web UI check: done in D-10 by Козло Богдан: the profile is shown as `performance · GPU` with the device name and runs complete.
+These limits are a starting point: mode D has not been run with them, and they fit this one GPU.
+
+**Peak GPU memory is an upper bound.** It is read with `torch.cuda.max_memory_reserved()`, which includes memory the
+allocator cached in earlier runs of the same process, so mode A shows 182 MB it did not use itself.
 
 ## Measuring again
 
