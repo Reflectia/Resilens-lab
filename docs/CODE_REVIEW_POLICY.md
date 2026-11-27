@@ -10,7 +10,7 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 4. Author self-reviews the diff first and ticks the author checklist.
 5. A PR needs at least **1 approval** before merge.
 6. A PR is merged only when CI (GitHub Actions) is green: `CI` (`ruff check .`, `ruff format --check .`, `pytest tests`) and `PR title` (format `T-<id>: ...`).
-7. The author merges their own PR only after approval, using **Squash and merge**; delete the branch.
+7. The author merges their own PR only after approval, using **Create a merge commit**; delete the branch.
 
 ## 2. Review timing (SLA)
 
@@ -19,7 +19,7 @@ Short rules so every change is reviewed the same way. Applies to everyone, inclu
 
 ## 3. PR titles and commits
 
-The **PR title** is what matters: with squash merge it becomes the commit message on `main`.
+The **PR title** is what matters: it goes into the merge commit message on `main`.
 
 Format: `T-<id>: <imperative summary, max ~72 chars>`. Subtasks use the parent task id: task T-04-0 is titled `T-04: ...`.
 
@@ -27,9 +27,8 @@ Good: `T-21: add confidence threshold validation to YOLOX config`
 Bad: `fix`, `changes`, `wip`, `final final 2`
 
 Rules:
-- Commits inside a PR are free-form but meaningful (no `wip` spam); they are squashed anyway.
+- Commits inside a PR stay in the history of `main`, so each one needs a meaningful message (no `wip` spam).
 - No secrets, model weights, videos, or generated files (`runs/`, `data/`, `weights/`).
-- Repo setting (Settings → General → Pull Requests): squash merge default message = **Pull request title**, otherwise single-commit PRs use the commit message.
 
 ## 4. Reviewer checklist
 
@@ -70,12 +69,18 @@ Rules:
 ## 6. Author responsibilities
 
 - Respond to every comment (fix it or explain why not); reviewer resolves the thread.
-- Don't force-push after review has started without saying so; prefer new commits (squash handles history).
+- Don't force-push after review has started without saying so; prefer new commits.
 - Keep the PR description accurate as it changes.
 
 ## 7. Repo settings and enforcement
 
-The free GitHub plan does not enforce branch protection on private repos, so the rules above are a team agreement that GitHub does not check for us: nobody merges a PR with a red CI or without an approval, and nobody pushes directly to `main`. Free settings that still help (Settings → General → Pull Requests):
+The repository is public, so GitHub branch protection is available on the free plan. Protect `main` (Settings → Branches → Add branch protection rule):
 
-- Allow only **Squash merging**; default commit message = **Pull request title**.
+- Require a pull request before merging, with **1 approval**.
+- Require the status checks `CI` and `PR title` to pass.
+- Do not allow force pushes or deletions.
+
+Settings → General → Pull Requests:
+
+- Allow **merge commits**; default message = **Pull request title**.
 - Enable **Automatically delete head branches**.
