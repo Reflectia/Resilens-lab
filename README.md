@@ -19,7 +19,7 @@ same way), and the extra index provides the CPU build of PyTorch the lock pins. 
 environment, and how to update the locks: [Reproducibility](#reproducibility-code-version-and-environment).
 
 Put model weights into `weights/` and videos and scenarios into `data/` (both folders are excluded from git).
-TANet weights: download [TANnet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
+TANet weights: download [TANet.pth](https://drive.google.com/file/d/128zwUylKmnW1-octTVxCHRIbriOfb0Kf/view?usp=sharing) and save it as `weights/tanet.pth`.
 YOLOX-Nano weights: download [yolox_nano.pth](https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth) and save it as `weights/yolox_nano_coco.pth`.
 
 ### Local integration tests with trained weights
@@ -144,7 +144,7 @@ python scripts/lock_dependencies.py --upgrade-package numpy   # upgrade one pack
 
 ## Runs, modes and the Policy Engine
 
-Start a run through the REST API with a mode (A–E, `configs/modes/`), a resource profile (`configs/profiles/`) and how the video is fed:
+Start a run through the REST API with a mode (A–D, `configs/modes/`), a resource profile (`configs/profiles/`) and how the video is fed:
 
 ```bash
 curl -F mode=D -F profile=standard -F replay_mode=realtime -F "video=@path/to/fog_l2.mp4" http://127.0.0.1:8000/runs

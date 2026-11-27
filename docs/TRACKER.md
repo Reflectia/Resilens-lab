@@ -58,7 +58,7 @@ done
 
 Each run gets its own folder `runs/tracking/<sequence folder>_<clip>/`; use `--out-dir` to choose another one. Same video and same targets give identical `tracks.txt`.
 
-**3. Track on enhanced frames (modes B–E).** The command reads the raw video, so it measures the tracker without enhancement (mode A). To track after an enhancer, use the stage in the pipeline:
+**3. Track on enhanced frames (modes B–D).** The command reads the raw video, so it measures the tracker without enhancement (mode A). To track after an enhancer, use the stage in the pipeline:
 
 ```python
 from pathlib import Path
@@ -83,19 +83,18 @@ In mode D the Policy Engine may downscale some frames. The tracker then runs opt
 | `timings.csv` | `frame, tracker_ms`: time of the tracker alone, excluding video decoding and display. |
 | `tracked.mp4` | Only with `--save-video`. |
 
-### Evaluating the results (not implemented yet)
+### Evaluating the results
 
-Notes for the benchmark task:
+The `benchmark` and `compare` commands evaluate the tracks of every mode and compare them with mode A (README,
+"Quality benchmark"). Tracking quality is HOTA, IDF1 and ID switches from TrackEval, computed against the full MOT
+ground truth (`src/resilens/metrics/tracking.py`).
 
-- **Use single-object metrics, not plain TrackEval.** The tracker follows only the selected targets, while MOT20 ground truth contains every person. Running TrackEval (HOTA, IDF1) on the full ground truth counts everyone else as missed, so HOTA comes out near 0 whatever the tracker does.
-- **Match targets to ground truth first.** Pair each target with the GT ID whose box overlaps it most on the first frame. Then report per target:
-  - the share of frames with IoU ≥ 0.5;
-  - the mean IoU;
-  - the frame where the target was lost.
-
-  Alternatively, filter the ground truth to those IDs before running TrackEval.
-- **Decide how to treat waiting boxes.** Rows with score `0` are stale positions; decide once whether they count, and treat every mode the same way.
-- **Use the same frames in every run.** Every run processes the whole video, even when all targets are lost, so frame counts match between runs.
+- **The scores are low whatever the mode.** FlowTracker follows only the targets it takes from the first frame with
+  detections, and the ground truth contains every person, so everyone else counts as missed (DEF-05). Compare modes
+  with each other, not with an absolute value.
+- **Targets depend on the mode.** Each mode picks its targets from its own first detections, so a difference between
+  modes in the tracking scores is partly a difference in targets. Read it together with the detection metrics.
+- **Every run processes the whole video**, even when all targets are lost, so frame counts match between runs.
 
 ## Limitations
 

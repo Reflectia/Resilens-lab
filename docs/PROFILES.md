@@ -56,7 +56,7 @@ The budget correction works as intended: on standard, fog moves from `enhance` t
 ## GPU check of the performance profile (D-10)
 
 The performance profile runs TANet and YOLOX on CUDA (`device: cuda`); the analyzer and the flow tracker stay on the
-CPU. Its limits stay `null` until this check. Integration: Бучко Устим; measurement and check: Козло Богдан.
+CPU. Its limits stay `null` in v2.0: only modes A and B were measured on the GPU (see the results). Integration: Бучко Устим; measurement and check: Козло Богдан.
 
 What the code does without a GPU: `GET /profiles` reports the profile as unavailable with the reason, the Web UI marks
 it "(unavailable)" and does not start it, `POST /runs` answers 422, a CLI run fails before loading models, and
@@ -118,7 +118,7 @@ Start the API and the UI on the GPU machine (README). On **New run** the profile
 the profile table shows `Device: GPU: <name>`. Start mode B on a short clip with this profile; the completed run
 shows *Peak GPU memory, MB* under Performance, and in mode D the policy log tooltip shows `gpu_memory_mb`.
 
-### Results (to be filled in by the check)
+### Results of the check
 
 Machine: NVIDIA GeForce GTX 1650 (4 GiB), CUDA 12.8, PyTorch 2.9.1+cu128, AMD Ryzen 5 5500U (6 cores, 12 threads), 16 GiB RAM, Windows 11, commit `5c0f8b9`.
 These results predate the lock files: a new measurement from `requirements-cu130.lock` uses PyTorch 2.14.1+cu130.
@@ -135,12 +135,12 @@ These results predate the lock files: a new measurement from `requirements-cu130
 | fog_l2 | performance | A    | 118 / 121 ms   | 1395 MB  | 918 %    | 182 MB          | —       | 35 ms | 79 ms   |
 | fog_l2 | performance | B    | 189 / 197 ms   | 1464 MB  | 778 %    | 182 MB          | 102 ms  | 23 ms | 60 ms   |
 
-Mode D with the chosen limits: _actions, share of frames TANet ran on, frames within budget (as in "Mode D with
-these limits" above)._
+**Not done for v2.0:** mode D on the GPU, the limits of the performance profile (`frame_budget_ms`, `gpu_memory_limit_mb`,
+`memory_limit_mb` stay `null`, so the policy never lowers the action on this profile) and the Web UI check of the GPU
+profile. Run steps 2 to 4 above on a GPU machine to complete them.
 
-Chosen limits and why: _frame_budget_ms, gpu_memory_limit_mb, memory_limit_mb._
-
-Web UI check: _profile shown as GPU with the device name; run completed; peak GPU memory shown._
+**Peak GPU memory is an upper bound.** It is read with `torch.cuda.max_memory_reserved()`, which includes memory the
+allocator cached in earlier runs of the same process, so mode A shows 182 MB it did not use itself.
 
 ## Measuring again
 
@@ -163,6 +163,6 @@ Runs through `POST /runs` and `benchmark` report the same figures in their metri
 
 ## Open points
 
-- The **performance** profile needs a machine with a GPU; its limits stay `null` until the D-10 check above.
+- The **performance** profile needs a machine with a GPU; its limits stay `null` in v2.0 (mode D, the limits and the Web UI check on the GPU are not done, see the D-10 results above).
 - **Measure on a stable machine** (or in Docker) before using the limits for the final comparison (T-18).
 - Whether the one-step budget correction is enough (see `docs/POLICY.md`) is still with TL/PM. With these limits `skip` fits the budget on both profiles, so in these runs one step was enough.
