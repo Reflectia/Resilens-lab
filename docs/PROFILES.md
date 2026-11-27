@@ -150,8 +150,6 @@ These limits are a starting point: mode D has not been run with them, and they f
 **Peak GPU memory is an upper bound.** It is read with `torch.cuda.max_memory_reserved()`, which includes memory the
 allocator cached in earlier runs of the same process, so mode A shows 182 MB it did not use itself.
 
-Web UI check: _to be confirmed by Козло Богдан (profile shown as `performance · GPU` with the device name, run completed, peak GPU memory shown)._
-
 ## Measuring again
 
 ```bash
