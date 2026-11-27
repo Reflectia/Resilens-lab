@@ -1,6 +1,10 @@
+# Derived from TransWeather (https://github.com/jeya-maria-jose/TransWeather),
+# Copyright (c) 2021 Jeya Maria Jose, MIT License,
+# via MWFormer (https://github.com/taco-group/MWFormer), no licence (see ADR-06).
+# Modified for Resilens. See THIRD_PARTY_NOTICES.md.
+
 # input feature vectors (dim=64)
 #local + global + channel
-
 
 import torch
 import torch.nn as nn

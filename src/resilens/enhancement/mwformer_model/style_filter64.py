@@ -1,3 +1,9 @@
+# Derived from TransWeather (https://github.com/jeya-maria-jose/TransWeather),
+# Copyright (c) 2021 Jeya Maria Jose, MIT License,
+# via MWFormer (https://github.com/taco-group/MWFormer), no licence (see ADR-06).
+# Modified for Resilens. See THIRD_PARTY_NOTICES.md.
+
+
 # Style filter. Generate a 64-dimension vector to represent the weather type.
 # First extract a Gram matrix, then apply an MLP to it.
 import numpy as np

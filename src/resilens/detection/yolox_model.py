@@ -1,6 +1,10 @@
-# Source: https://github.com/Megvii-BaseDetection/YOLOX (Apache-2.0), yolox/models: network_blocks.py, darknet.py,
-# yolo_pafpn.py, yolo_head.py. Inference-only copy: training losses, the Darknet53/ResNet backbones and
-# configurable activations are removed. Module and parameter names are kept so official checkpoints load as is.
+# Derived from YOLOX (https://github.com/Megvii-BaseDetection/YOLOX),
+# yolox/models: network_blocks.py, darknet.py, yolo_pafpn.py, yolo_head.py.
+# Copyright (c) 2021-2022 Megvii Inc. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (LICENSES/Apache-2.0.txt).
+# Modified for Resilens: inference-only copy; training losses, the Darknet53/ResNet
+# backbones and configurable activations are removed. Module and parameter names
+# are kept so official checkpoints load as is. See THIRD_PARTY_NOTICES.md.
 
 import torch
 import torch.nn as nn
