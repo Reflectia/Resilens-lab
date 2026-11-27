@@ -40,7 +40,7 @@ class ModeConfig(BaseModel):
     enhancer_params: dict = Field(default_factory=dict)
     detector: str = "yolox_nano"
     detector_params: dict = Field(default_factory=dict)
-    tracker: str = "bytetrack"
+    tracker: str = "flow"
     tracker_params: dict = Field(default_factory=dict)
 
 

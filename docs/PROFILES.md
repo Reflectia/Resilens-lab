@@ -9,8 +9,9 @@ A resource profile (`configs/profiles/*.yaml`) describes the hardware a run may 
 | Hardware | 2 CPUs, 4 GB RAM | 4 CPUs, 8 GB RAM | NVIDIA GPU with CUDA (measured in D-10, see below) |
 | `cpu_threads` (PyTorch and OpenCV) | 2 | 4 | all cores |
 | Docker limits | `docker-compose.minimal.yml` | `docker-compose.standard.yml` | — |
-| `frame_budget_ms` | 300 | 200 | `null` |
+| `frame_budget_ms` | 300 | 200 | 220 |
 | `memory_limit_mb` | 4096 | 8192 | `null` |
+| `gpu_memory_limit_mb` | `null` | `null` | 4096 |
 | `cpu_limit_percent` | `null` | `null` | `null` |
 | `downscale_resolution` | 960×540 | 1280×720 | 1280×720 |
 
@@ -56,7 +57,7 @@ The budget correction works as intended: on standard, fog moves from `enhance` t
 ## GPU check of the performance profile (D-10)
 
 The performance profile runs TANet and YOLOX on CUDA (`device: cuda`); the analyzer and the flow tracker stay on the
-CPU. Its limits stay `null` in v2.0: only modes A and B were measured on the GPU (see the results). Integration: Бучко Устим; measurement and check: Козло Богдан.
+CPU. Its limits come from this check (see Results). Integration: Бучко Устим; measurement and check: Козло Богдан.
 
 What the code does without a GPU: `GET /profiles` reports the profile as unavailable with the reason, the Web UI marks
 it "(unavailable)" and does not start it, `POST /runs` answers 422, a CLI run fails before loading models, and
@@ -118,7 +119,7 @@ Start the API and the UI on the GPU machine (README). On **New run** the profile
 the profile table shows `Device: GPU: <name>`. Start mode B on a short clip with this profile; the completed run
 shows *Peak GPU memory, MB* under Performance, and in mode D the policy log tooltip shows `gpu_memory_mb`.
 
-### Results of the check
+### Results
 
 Machine: NVIDIA GeForce GTX 1650 (4 GiB), CUDA 12.8, PyTorch 2.9.1+cu128, AMD Ryzen 5 5500U (6 cores, 12 threads), 16 GiB RAM, Windows 11, commit `5c0f8b9`.
 These results predate the lock files: a new measurement from `requirements-cu130.lock` uses PyTorch 2.14.1+cu130.
@@ -135,12 +136,21 @@ These results predate the lock files: a new measurement from `requirements-cu130
 | fog_l2 | performance | A    | 118 / 121 ms   | 1395 MB  | 918 %    | 182 MB          | —       | 35 ms | 79 ms   |
 | fog_l2 | performance | B    | 189 / 197 ms   | 1464 MB  | 778 %    | 182 MB          | 102 ms  | 23 ms | 60 ms   |
 
-**Not done for v2.0:** mode D on the GPU, the limits of the performance profile (`frame_budget_ms`, `gpu_memory_limit_mb`,
-`memory_limit_mb` stay `null`, so the policy never lowers the action on this profile) and the Web UI check of the GPU
-profile. Run steps 2 to 4 above on a GPU machine to complete them.
+Mode D with the chosen limits: not measured yet (the second command of step 3, on the GPU machine).
+
+Chosen limits and why:
+
+- `frame_budget_ms: 220`: 1.1 × p95 of mode B on fog_l2 (197 ms), so TANet can run on every foggy frame. Mode B is
+  not several times slower than mode A on the GPU (197 vs 121 ms), so the mode B rule applies.
+- `gpu_memory_limit_mb: 4096`: the memory of the GTX 1650; the measured peak (182 MB) is far below it.
+- `memory_limit_mb` and `cpu_threads`: `null` (no Docker limit for this profile, all cores).
+
+These limits are a starting point: mode D has not been run with them, and they fit this one GPU.
 
 **Peak GPU memory is an upper bound.** It is read with `torch.cuda.max_memory_reserved()`, which includes memory the
 allocator cached in earlier runs of the same process, so mode A shows 182 MB it did not use itself.
+
+Web UI check: _to be confirmed by Козло Богдан (profile shown as `performance · GPU` with the device name, run completed, peak GPU memory shown)._
 
 ## Measuring again
 
@@ -163,6 +173,6 @@ Runs through `POST /runs` and `benchmark` report the same figures in their metri
 
 ## Open points
 
-- The **performance** profile needs a machine with a GPU; its limits stay `null` in v2.0 (mode D, the limits and the Web UI check on the GPU are not done, see the D-10 results above).
+- The **performance** limits fit the GTX 1650 above; mode D with these limits is not measured yet, and on another GPU the profile should be measured again (step 2).
 - **Measure on a stable machine** (or in Docker) before using the limits for the final comparison (T-18).
 - Whether the one-step budget correction is enough (see `docs/POLICY.md`) is still with TL/PM. With these limits `skip` fits the budget on both profiles, so in these runs one step was enough.

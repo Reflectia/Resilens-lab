@@ -168,8 +168,10 @@ def test_frames_over_the_latency_budget_are_downgraded(tmp_path: Path, make_vide
 
 
 def test_unknown_stage_in_config() -> None:
-    with pytest.raises(ValueError, match="Unknown stage 'bytetrack'"):
-        Pipeline.from_config(run_config(ModeConfig(name="X", detector_params={"weights_path": "w.pth"})))
+    with pytest.raises(ValueError, match="Unknown stage 'unknown'"):
+        Pipeline.from_config(
+            run_config(ModeConfig(name="X", tracker="unknown", detector_params={"weights_path": "w.pth"}))
+        )
 
 
 def test_stages_run_in_order_with_timings() -> None:

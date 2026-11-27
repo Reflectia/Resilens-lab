@@ -3,7 +3,7 @@ device: cuda  # TANet and YOLOX on the GPU
 cpu_threads: null
 max_resolution: null  # (width, height); larger videos are rejected
 downscale_resolution: [1280, 720]  # (width, height) for the policy's downscale action
-frame_budget_ms: null
+frame_budget_ms: 220  # 1.1 x p95 of mode B on fog_l2, GTX 1650 (docs/PROFILES.md, D-10)
 memory_limit_mb: null
 cpu_limit_percent: null  # 100 = one fully used core
-gpu_memory_limit_mb: null
+gpu_memory_limit_mb: 4096  # GTX 1650 memory
