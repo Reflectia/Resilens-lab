@@ -96,6 +96,20 @@ Or run everything in Docker: `GIT_COMMIT=$(git rev-parse HEAD) docker compose up
 `requirements.lock` and has no `.git`, so the commit is passed at build time; without `GIT_COMMIT` runs record the
 commit as unknown.
 
+## Third-party code and weights
+
+The code and the weights of TANet and MWFormer have no licence, so they are not part of the public distribution of
+release 2.0. The repository links to the originals; download the weights as described above and in
+[docs/MWFORMER.md](docs/MWFORMER.md). Details and the other licences: `docs/ADR_and_licenses_D-08.pdf` (ADR-04, ADR-06,
+"Third-party licences").
+
+- TANet: [xhuachris/TANet-ACCV-2024](https://github.com/xhuachris/TANet-ACCV-2024) (the code was taken from the copy
+  [Reflectia/Weather-removal-tanet](https://github.com/Reflectia/Weather-removal-tanet))
+- MWFormer: [taco-group/MWFormer](https://github.com/taco-group/MWFormer) (copy:
+  [Reflectia/Weather-removal-mwformer](https://github.com/Reflectia/Weather-removal-mwformer)); part of its code comes
+  from [TransWeather](https://github.com/jeya-maria-jose/TransWeather) (MIT)
+- YOLOX: [Megvii-BaseDetection/YOLOX](https://github.com/Megvii-BaseDetection/YOLOX) (Apache-2.0)
+
 ## Mode C (MWFormer, offline baseline)
 
 Mode C reads frames that MWFormer restored in advance; build the cache with `python -m resilens.cli mwformer-cache`,

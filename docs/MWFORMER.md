@@ -67,8 +67,12 @@ is the feature vector the backbone is conditioned on.
 
 `src/resilens/enhancement/mwformer_model/` is the inference part of
 [Reflectia/Weather-removal-mwformer](https://github.com/Reflectia/Weather-removal-mwformer) (`EncDec.py`,
-`style_filter64.py`, `base_networks.py`). The repository has no licence file, so ask the authors before publishing the
-code outside the project. Changes: absolute imports, `timm.layers` instead of the deprecated `timm.models.layers`, no
+`style_filter64.py`, `base_networks.py`), a copy of the original
+[taco-group/MWFormer](https://github.com/taco-group/MWFormer). Neither repository has a licence file, and nor do the
+weights, so the code and the weights are not part of the public distribution of release 2.0: use the links above and
+the download instructions here (ADR-06, `docs/ADR_and_licenses_D-08.pdf`). `EncDec.py` and `style_filter64.py` also
+contain code of [TransWeather](https://github.com/jeya-maria-jose/TransWeather) (MIT), whose copyright notice and
+licence text must be kept. Changes: absolute imports, `timm.layers` instead of the deprecated `timm.models.layers`, no
 `pdb`. The folder is excluded from ruff.
 
 ## Checks
